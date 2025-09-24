@@ -1,0 +1,109 @@
+/* =========================
+   HIVE THEME :: Phoenix Cockpit
+   Scoped styles — no more runaway QWidget blocks
+   ========================= */
+
+/* === Dialogs === */
+QDialog {
+    background: #f7f8fa;
+    border: 1px solid #ccc;
+    border-radius: 8px;
+    font-family: 'Segoe UI', Arial, sans-serif;
+    font-size: 13px;
+    color: #222;
+}
+
+/* === Labels === */
+QLabel {
+    font-weight: 500;
+    color: #222;
+}
+
+/* Vault status coloring */
+QLabel[vault_status="unlocked"] {
+    color: #19b551;
+    font-weight: 700;
+}
+QLabel[vault_status="locked"] {
+    color: #a94442;
+    font-weight: 700;
+}
+
+/* === Line edits (password, text inputs) === */
+QLineEdit {
+    background: #fff;
+    border: 1px solid #bbb;
+    border-radius: 5px;
+    padding: 6px 8px;
+    min-height: 28px;
+    font-size: 13px;
+}
+
+/* === Combo boxes (deployment selector) === */
+QComboBox {
+    background: #fff;
+    border: 1px solid #bbb;
+    border-radius: 5px;
+    padding: 4px 8px;
+    min-height: 28px;
+    min-width: 90px;
+}
+
+/* === Push buttons === */
+QPushButton {
+    padding: 3px 6px;
+    min-height: 24px;
+    border: none;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 500;
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+        stop:0 #fafdff, stop:1 #e4e8ee);
+    margin: 3px 0;
+}
+
+/* Hover and pressed states */
+QPushButton:hover {
+    background: #eef3f9;
+    border: 1px solid #bbb;
+}
+QPushButton:pressed {
+    background: #e0e6ef;
+}
+
+/* === Role-based buttons === */
+QPushButton#primary {
+    color: #0078d7;
+    font-weight: bold;
+}
+QPushButton#primary:hover, QPushButton#primary:focus {
+    border: 2px solid #0078d7;
+    background: #eef6ff;
+}
+
+QPushButton#danger {
+    color: #b53c33;
+}
+QPushButton#danger:hover, QPushButton#danger:focus {
+    border: 2px solid #
+}
+
+QGroupBox {
+    border: 1.5px solid #ccc;
+    border-radius: 6px;
+    margin-top: 12px;
+    font-weight: bold;
+    padding: 6px;
+}
+QGroupBox::title {
+    subcontrol-origin: margin;
+    left: 10px;
+    padding: 0 4px;
+    color: #0078d7;
+}
+QStatusBar {
+    background-color: #2d2d2d;
+    color: #d0ffd0;
+    font-family: Consolas;
+    font-size: 12px;
+}
