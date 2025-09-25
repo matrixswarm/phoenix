@@ -14,7 +14,8 @@ from matrix_gui.modules.vault.services.vault_singleton import VaultSingleton
 from matrix_gui.modules.vault.services.vault_obj import VaultObj
 from matrix_gui.core.emit_gui_exception_log import emit_gui_exception_log
 from PyQt5.QtWidgets import QStatusBar, QLabel
-from matrix_gui.core.splash import show_with_splash
+from matrix_gui.core.splash import PhoenixSplash
+from PyQt5.QtCore import QTimer
 
 from matrix_gui.modules.vault.ui.vault_popup import VaultPasswordDialog
 from matrix_gui.modules.vault.ui.vault_init_dialog import VaultInitDialog
@@ -466,6 +467,16 @@ class PhoenixCockpit(QMainWindow):
         # Do NOT reload or re-emit here; the dialog already emitted 'vault.unlocked'.
         return
 
+
+def show_with_splash(app, main_cls, delay=5000):  # 5 seconds
+    splash = PhoenixSplash()
+    splash.show()
+    QTimer.singleShot(delay, lambda: _launch(app, splash, main_cls))
+
+def _launch(app, splash, main_cls):
+    splash.close()
+    cockpit = main_cls()
+    cockpit.show()
 
 if __name__ == '__main__':
     multiprocessing.freeze_support()

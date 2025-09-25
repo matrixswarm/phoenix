@@ -4,21 +4,36 @@ from PyQt5.QtCore import Qt, QTimer
 
 class PhoenixSplash(QSplashScreen):
     def __init__(self):
-        pixmap = QPixmap("matrix_gui/theme/matrixswarm_logo.png")  # your crest
+        pixmap = QPixmap("matrix_gui/theme/matrixswarm_logo.png")  # Queen’s crest
         super().__init__(pixmap)
+
         self.setFont(QFont("Consolas", 12))
+        self.messages = [
+            "Decrypting Vault…",
+            "Assembling Guardians…",
+            "Establishing Trust Lineage…",
+            "Summoning Sentinels…",
+            "All Hail the Queen…"
+        ]
+        self.index = 0
+
+        # show first message
         self.showMessage(
-            "All Hail the Queen...",
+            self.messages[self.index],
             Qt.AlignBottom | Qt.AlignCenter,
             Qt.white
         )
 
-def show_with_splash(app, main_cls, delay=3000):
-    splash = PhoenixSplash()
-    splash.show()
-    QTimer.singleShot(delay, lambda: _launch(app, splash, main_cls))
+        # cycle messages every 1200ms
+        self.timer = QTimer(self)
+        self.timer.timeout.connect(self.next_message)
+        self.timer.start(1200)
 
-def _launch(app, splash, main_cls):
-    splash.close()
-    cockpit = main_cls()
-    cockpit.show()
+    def next_message(self):
+        self.index = (self.index + 1) % len(self.messages)
+        self.showMessage(
+            self.messages[self.index],
+            Qt.AlignBottom | Qt.AlignCenter,
+            Qt.white
+        )
+
