@@ -111,6 +111,10 @@ matrix_directive = {
                 "grid_size": 20,
                 "npc_count": 100,
                 "tick_interval_sec": 1,
+                "ui_panel": [
+                    "npc_simulator.gameboard",
+                    "npc_simulator.config"
+                ],
                 "service-manager": [{
                   "role": [
                     "npc.swarm.control@cmd_control_npcs",

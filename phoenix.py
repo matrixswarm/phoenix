@@ -14,6 +14,7 @@ from matrix_gui.modules.vault.services.vault_singleton import VaultSingleton
 from matrix_gui.modules.vault.services.vault_obj import VaultObj
 from matrix_gui.core.emit_gui_exception_log import emit_gui_exception_log
 from PyQt5.QtWidgets import QStatusBar, QLabel
+from matrix_gui.core.splash import show_with_splash
 
 from matrix_gui.modules.vault.ui.vault_popup import VaultPasswordDialog
 from matrix_gui.modules.vault.ui.vault_init_dialog import VaultInitDialog
@@ -467,19 +468,19 @@ class PhoenixCockpit(QMainWindow):
 
 
 if __name__ == '__main__':
-
-    multiprocessing.freeze_support()   # safe for Windows & PyInstaller
+    multiprocessing.freeze_support()
 
     app = QApplication(sys.argv)
 
     # Load Hive stylesheet
     try:
-        with open("matrix_gui/theme/icons.qss", "r", encoding="utf-8", errors="replace") as f:
+        with open("matrix_gui/theme/icons.qss", "r", encoding="utf-8") as f:
             app.setStyleSheet(f.read())
-        with open("matrix_gui/theme/hive_theme.qss", "r", encoding="utf-8", errors="replace") as f:
+        with open("matrix_gui/theme/hive_theme.qss", "r", encoding="utf-8") as f:
             app.setStyleSheet(f.read())
     except Exception as e:
         print(f"[HIVE/STYLE] Failed to load stylesheet: {e}")
 
-    cockpit = PhoenixCockpit()
+    show_with_splash(app, PhoenixCockpit, delay=4000)
+
     sys.exit(app.exec_())

@@ -2,7 +2,7 @@
 
 (from the MatrixSwarm ecosystem)
 
-Phoenix Cockpit is the secure command bridge for the MatrixSwarm.
+Phoenix Cockpit is the secure command bridge for the MatrixSwarm/MatrixOs.
 It’s not a toy GUI — it’s the operator’s deck: unlock the vault, connect to deployments, command the swarm, and watch the agents breathe.
 
 Built with PyQt5.
@@ -20,7 +20,7 @@ Built with PyQt5.
 
 ### Install
 ````bash
-pip install -e .
+  pip install -e .
 ````
 ### Unlock Vault
 
