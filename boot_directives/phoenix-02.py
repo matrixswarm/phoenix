@@ -7,7 +7,9 @@ matrix_directive = {
             "out": True
           }
         },
-
+        "ui":{
+            "agent_tree": {"emoji": "🧬"},
+        },
         "children": [# MATRIX PROTECTION LAYER 4 SENTINELS
         # 4th SENTINEL WATCHES MATRIX, REST WATCH SENTINEL IN FRONT
         # ONLY WAY TO KILL MATRIX WOULD BE TO KILL THEM ALL, MATRIX INCLUSIVE, TAKING ANY COMBO OF 4 OUT DOES NOTHING
@@ -16,21 +18,36 @@ matrix_directive = {
             "name": "sentinel",
             "app": "matrix-core",
             "filesystem": {},
-            "config": {"matrix_secure_verified": 1},
+            "config": {
+                "matrix_secure_verified": 1,
+                "ui":{
+                    "agent_tree": {"emoji": "🛡️"},
+                },
+            },
             "children": [
                 {
                     "universal_id": "guardian-2",
                     "name": "sentinel",
                     "app": "matrix-core",
                     "filesystem": {},
-                    "config": {"matrix_secure_verified": 1},
+                    "config": {
+                        "matrix_secure_verified": 1,
+                        "ui":{
+                            "agent_tree": {"emoji": "🛡️"},
+                        },
+                    },
                     "children": [
                         {
                             "universal_id": "guardian-3",
                             "name": "sentinel",
                             "app": "matrix-core",
                             "filesystem": {},
-                            "config": {"matrix_secure_verified": 1},
+                            "config": {
+                                "matrix_secure_verified": 1,
+                                "ui":{
+                                    "agent_tree": {"emoji": "🛡️"},
+                                },
+                            },
                             "children": [
                                 {
                                     "universal_id": "guardian-4",
@@ -40,7 +57,10 @@ matrix_directive = {
                                     "config": {
                                         "matrix_secure_verified": 1,
                                         "watching": "the Queen",
-                                        "universal_id_under_watch": "matrix"
+                                        "universal_id_under_watch": "matrix",
+                                        "ui":{
+                                            "agent_tree": {"emoji": "🛡️"},
+                                        },
                                     }
                                 }
                             ]
@@ -65,7 +85,10 @@ matrix_directive = {
               },
             },
             "config": {
-              "service-manager": []
+              "service-manager": [],
+              "ui":{
+                "agent_tree": {"emoji": "🌐"},
+              },
             }
           },
           {
@@ -84,6 +107,9 @@ matrix_directive = {
                 }
             },
             "config": {
+                "ui": {
+                    "agent_tree": {"emoji": "🛰️"},
+                },
                 "service-manager": [
                     {
                         "role": [
@@ -99,8 +125,7 @@ matrix_directive = {
                             "hive.proxy.route": 5,
                             "default": 10
                         }
-                    }
-                ]
+                    }]
                 },
             },
             {
@@ -137,6 +162,9 @@ matrix_directive = {
             "universal_id": "apache_watchdog-1",
             "name": "apache_watchdog",
                 "config": {
+                    "ui": {
+                        "agent_tree": {"emoji": "🧭️"},
+                    },
                     "check_interval_sec": 10,
                     "service_name": "httpd",  # change to "httpd" for RHEL/CentOS
                     "ports": [80, 443],
@@ -151,6 +179,9 @@ matrix_directive = {
                 "universal_id": "mysql-red-phone",
                 "name": "mysql_watchdog",
                 "config": {
+                    "ui": {
+                        "agent_tree": {"emoji": "🛢️"},
+                    },
                     "mysql_port": 3306,
                     "socket_path": "/var/run/mysqld/mysqld.sock",
                     "service_name": "mariadb",
@@ -175,7 +206,9 @@ matrix_directive = {
                 },
             },
             "config": {
-
+                "ui": {
+                    "agent_tree": {"emoji": "📜️"},
+                },
                 "service-manager": [{
                     "role": ["hive.log@cmd_stream_log"],
                     "scope": ["parent", "any"],  # who it serves
@@ -192,6 +225,9 @@ matrix_directive = {
             "universal_id": "invisible-man",
             "name": "ghost_wire",
             "config": {
+                "ui": {
+                    "agent_tree": {"emoji": "👻️"},
+                },
                 "tick_rate": 5,
                 "watch_paths": [
                     "/etc/passwd",
@@ -218,6 +254,9 @@ matrix_directive = {
             "universal_id": "gatekeeper",
             "name": "gatekeeper",
             "config": {
+                "ui": {
+                    "agent_tree": {"emoji": "🚪"},
+                },
                 "log_path": "/var/log/auth.log",
                 "maxmind_db": "GeoLite2-City.mmdb",
                 "geoip_enabled": 1,
@@ -236,6 +275,9 @@ matrix_directive = {
                 },
             },
             "config": {
+                "ui": {
+                    "agent_tree": {"emoji": "💬"},
+                },
                 "service-manager": [{
                     "role": ["hive.alert@cmd_send_alert_msg"],
                     "scope": ["parent", "any"],
@@ -247,6 +289,9 @@ matrix_directive = {
             "universal_id": "forensic-detective-1",
             "name": "forensic_detective",
             "config": {
+                "ui": {
+                    "agent_tree": {"emoji": "🕵️"},
+                },
                 "service-manager": [{
                     "role": ["hive.forensics.data_feed@cmd_ingest_status_report"],
                 }],
@@ -262,6 +307,9 @@ matrix_directive = {
             "universal_id": "system-health-1",
             "name": "system_health",
             "config": {
+                "ui": {
+                    "agent_tree": {"emoji": "🖥️"},
+                },
                 "check_interval_sec": 60,
                 "mem_threshold_percent": 90.0,  # Custom threshold
                 "cpu_threshold_percent": 85.0,  # Custom threshold
@@ -274,6 +322,9 @@ matrix_directive = {
             "universal_id": "network-health-1",
             "name": "network_health",
             "config": {
+                "ui": {
+                    "agent_tree": {"emoji": "📶"},
+                },
                 "check_interval_sec": 30,  # Check network status every 30 seconds
                 "exclude_interfaces": [],  # List of interfaces to skip (e.g. ["lo"])
                 "tx_threshold_mbps": 100,  # Warn if outbound rate exceeds 100 Mbps
@@ -288,6 +339,9 @@ matrix_directive = {
             "name": "nginx_watchdog",
             "enabled": False,
             "config": {
+                "ui": {
+                    "agent_tree": {"emoji": "🎉"},
+                },
                 "check_interval_sec": 10,
                 "always_alert": 1,
                 "restart_limit": 3,
@@ -303,6 +357,9 @@ matrix_directive = {
             "name": "redis_watchdog",
             "app": "redis-core",
             "config": {
+                "ui": {
+                    "agent_tree": {"emoji": "🎭"},
+                },
                 "check_interval_sec": 10,
                 "restart_limit": 3,
                 "redis_port": 6379,
@@ -324,6 +381,9 @@ matrix_directive = {
                 },
             },
             "config": {
+                "ui": {
+                    "agent_tree": {"emoji": "📡"},
+                },
                 "service-manager": [{
                     "role": [
                         "comm",
@@ -345,6 +405,9 @@ matrix_directive = {
               "connection": { "proto": "openai" }
             },
             "config": {
+                "ui": {
+                    "agent_tree": {"emoji": "🔮"},
+                },
                 "service-manager": [{
                     "role": ["hive.oracle@cmd_msg_prompt"],
                 }]
