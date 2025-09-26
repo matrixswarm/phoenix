@@ -14,9 +14,9 @@ from matrix_gui.modules.vault.services.vault_singleton import VaultSingleton
 from matrix_gui.modules.vault.services.vault_obj import VaultObj
 from matrix_gui.core.emit_gui_exception_log import emit_gui_exception_log
 from PyQt5.QtWidgets import QStatusBar, QLabel
-from matrix_gui.core.splash import PhoenixSplash
 from PyQt5.QtCore import QTimer
-
+from PyQt5.QtGui import QIcon
+from matrix_gui.core.splash import PhoenixSplash
 from matrix_gui.modules.vault.ui.vault_popup import VaultPasswordDialog
 from matrix_gui.modules.vault.ui.vault_init_dialog import VaultInitDialog
 from PyQt5.QtWidgets import QWidget, QHBoxLayout, QPushButton
@@ -69,6 +69,10 @@ class PhoenixCockpit(QMainWindow):
         self.status_bar.setStyleSheet("color: #33ff33; background-color: #222; font-family: Consolas;")
         self.status_bar.setFixedHeight(24)
 
+        # Window Icon
+        logo_path = "matrix_gui/theme/main_panel_logo.png"
+        self.setWindowIcon(QIcon(logo_path))
+
         # status bar
         self.status_vault = QLabel("Vault: 🔒")
         self.status_deployments = QLabel("Deployments: 0")
@@ -79,7 +83,6 @@ class PhoenixCockpit(QMainWindow):
         self.status_bar.addPermanentWidget(self.status_deployments)
         self.status_bar.addPermanentWidget(self.status_sessions)
         self.setStatusBar(self.status_bar)
-
 
         # === Legacy Controls (optional override) ===
         self.unlock_button = QPushButton("🔐 UNLOCK")

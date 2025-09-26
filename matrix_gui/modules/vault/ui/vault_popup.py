@@ -12,10 +12,10 @@ class VaultPasswordDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Unlock Vault")
-        # ✅ Replace with:
+
         self.setMinimumWidth(280)
-        self.setMinimumHeight(220)  # or 280 if you want more breathing room
-        self.resize(400, 500)  # give it a good default size
+
+        self.setMinimumHeight(300)  # give it a good default size
 
         self.vault_file_path = None
         self.vault_key_path = None
@@ -56,8 +56,8 @@ class VaultPasswordDialog(QDialog):
         layout.addWidget(self.create_button)
         layout.addWidget(self.cancel_button)
         layout.addWidget(self.change_pw_btn)
-        layout.setSpacing(12)  # space between rows
-        layout.setContentsMargins(18, 18, 18, 18)
+        layout.setSpacing(7)  # space between rows
+        layout.setContentsMargins(10, 8, 10, 8)
         self._unlock_fired = False
 
     def select_vault_file(self):

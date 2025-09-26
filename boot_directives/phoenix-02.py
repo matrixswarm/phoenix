@@ -10,7 +10,7 @@ matrix_directive = {
 
         "children": [# MATRIX PROTECTION LAYER 4 SENTINELS
         # 4th SENTINEL WATCHES MATRIX, REST WATCH SENTINEL IN FRONT
-        # ONLY WAY TO KILL MATRIX WOULD BE TO KILL THEM ALL, TAKING ANY COMBO OF 4 OUT DOES NOTHING
+        # ONLY WAY TO KILL MATRIX WOULD BE TO KILL THEM ALL, MATRIX INCLUSIVE, TAKING ANY COMBO OF 4 OUT DOES NOTHING
         {
             "universal_id": "guardian-1",
             "name": "sentinel",
@@ -111,10 +111,13 @@ matrix_directive = {
                 "grid_size": 20,
                 "npc_count": 100,
                 "tick_interval_sec": 1,
-                "ui_panel": [
-                    "npc_simulator.gameboard",
-                    "npc_simulator.config"
-                ],
+                "ui":{
+                    "agent_tree": {"emoji": "🎮", "icon": ":path_to_icon"},
+                    "panel": [
+                        "npc_simulator.gameboard",
+                        "npc_simulator.config"
+                    ],
+                },
                 "service-manager": [{
                   "role": [
                     "npc.swarm.control@cmd_control_npcs",

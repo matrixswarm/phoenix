@@ -3,14 +3,15 @@ import sys
 import time
 import datetime
 import copy
-from PyQt5.QtWidgets import QApplication, QMainWindow, QTextEdit
-
-from PyQt5.QtGui import QIcon, QPixmap
-from PyQt5.QtCore import Qt, QTimer
+from PyQt5.QtWidgets import QMainWindow
+from PyQt5.QtWidgets import QStackedWidget
+from PyQt5.QtGui import QIcon
+from PyQt5.QtCore import Qt, QSize
 from PyQt5.QtWidgets import (
-    QWidget, QSplitter,  QVBoxLayout, QHBoxLayout, QToolBar,
-    QGroupBox, QSizePolicy, QLabel, QPushButton, QApplication, QAction
+    QWidget, QVBoxLayout, QHBoxLayout, QToolBar,
+    QGroupBox, QLabel, QApplication, QAction
 )
+from matrix_gui.core.panel.control_bar import PanelButton
 from matrix_gui.core.panel.agent_detail.agent_detail_panel import AgentDetailPanel
 from matrix_gui.core.emit_gui_exception_log import emit_gui_exception_log
 from matrix_gui.core.panel.log_panel.log_panel import LogPanel
@@ -22,6 +23,8 @@ from matrix_gui.config.boot.globals import get_sessions
 from matrix_gui.core.dialog.replace_agent_dialog import ReplaceAgentDialog
 from matrix_gui.core.dialog.restart_agent_dialog import RestartAgentDialog
 from matrix_gui.core.dialog.delete_agent_dialog import DeleteAgentDialog
+from matrix_gui.core.panel.control_bar import ControlBar
+
 
 def run_session(session_id, conn):
 
@@ -54,13 +57,6 @@ def run_session(session_id, conn):
         win.show()
         app.exec_()
 
-        # GUI
-        app = QApplication(sys.argv)
-        win = SessionWindow(session_id, deployment, conn, ctx.bus, inbound, outbound)
-
-        win.show()
-        app.exec_()
-
     except Exception as e:
         emit_gui_exception_log("session_window.run_session", e)
 
@@ -88,20 +84,33 @@ class SessionWindow(QMainWindow):
             self.tree_wrapper = self._build_tree_panel()
             self.inspector_wrapper = self._build_inspector_panel()
             self.console_wrapper = self._build_log_panel()
+            self.console_wrapper.setObjectName("logs")
 
             # Status bar
             self.status_label = QLabel("Status: Initializing...")
             self._setup_status_bar()
 
-            # Layout
-            main_widget = QWidget()
-            main_layout = QHBoxLayout()
-            main_widget.setLayout(main_layout)
-            self.setCentralWidget(main_widget)
-            self._setup_main_layout(main_layout)
+            # Window Icon
+            logo_path = "matrix_gui/theme/panel_logo.png"
+            self.setWindowIcon(QIcon(logo_path))
 
-            # Controls
-            self._make_controls()
+            # Build the default cockpit panel (tree + inspector + logs)
+            self.default_panel = QWidget()
+            default_layout = QHBoxLayout()
+            self.default_panel.setLayout(default_layout)
+            self._setup_main_layout(default_layout)  # reuses existing builder
+            default_layout.setContentsMargins(0, 0, 0, 0)
+            default_layout.setSpacing(0)
+
+            # Stacked widget for extensibility
+            self.stacked = QStackedWidget()
+            self.stacked.addWidget(self.default_panel)  # index 0 = default cockpit view
+            self.setCentralWidget(self.stacked)
+
+            # Control Bar
+            self.control_bar = ControlBar(self)
+            self.setIconSize(QSize(24, 24))
+            self.setMinimumHeight(36)
 
             self.log_view.line_count_changed.connect(self._on_log_count_changed)
 
@@ -112,6 +121,7 @@ class SessionWindow(QMainWindow):
             # Events
             self.bus.on("channel.status", self._handle_channel_status)
             self.bus.on(f"inbound.verified.agent_log_view.update.{self.session_id}", self._handle_log_update)
+            self.bus.on("gui.agent.selected", self._handle_agent_selected)
             self.bus.on("gui.log.token.updated", self._set_active_log_token)
 
         except Exception as e:
@@ -133,21 +143,73 @@ class SessionWindow(QMainWindow):
     # --- Builders ---
     def _build_tree_panel(self):
         box = QGroupBox("Agent Tree")
-        box.setStyleSheet("""
-            QGroupBox {
-                font-weight: bold;
-                padding: 4px;
-                margin: 2px;
-                border: 1px solid #888;
-                border-radius: 4px;
-            }
-        """)
+
         layout = QVBoxLayout()
+        layout.setContentsMargins(6, 4, 6, 4)  # (L, T, R, B)
+        layout.setSpacing(4)
         deployment = copy.deepcopy(self.deployment)
         self.tree = PhoenixAgentTree(session_id=self.session_id, bus=self.bus, conn=self.conn, deployment=deployment, parent=self)
         layout.addWidget(self.tree)
         box.setLayout(layout)
         return box
+
+    def _handle_agent_selected(self, session_id, node, panels=None, **_):
+        if not panels:
+            # No specialty panels -> stay where you are
+            return
+
+        all_buttons = []
+
+        for panel_name in panels:
+            panel = self._load_custom_panel(panel_name, node)
+            if panel and hasattr(panel, "get_panel_buttons"):
+                panel_buttons = panel.get_panel_buttons() or []
+                if panel_buttons:
+                    print(f"[DEBUG] {panel_name} returned {len(panel_buttons)} buttons")
+                    # Defer showing panel until its button is clicked
+                    for btn in panel_buttons:
+                        # wrap handler so it switches panel when clicked
+                        def make_handler(real_handler, p=panel):
+                            def _wrapped():
+                                if real_handler:
+                                    real_handler()
+                                self.stacked.setCurrentWidget(p)
+
+                            return _wrapped
+
+                        all_buttons.append(PanelButton(btn.icon, btn.text, make_handler(btn.handler, panel)))
+            else:
+                print(f"[DEBUG] {panel_name} has no usable buttons, ignoring")
+
+        # Only update toolbar if we actually collected something
+        if all_buttons:
+            self.control_bar.clear_buttons()
+            # add Home button at the end
+            self.control_bar.add_button("🏠", "Home", self.show_default_panel)
+            for btn in all_buttons:
+                self.control_bar.add_button(btn.icon, btn.text, btn.handler)
+
+            print("[DEBUG] Added Home button")
+        else:
+            print("[DEBUG] No specialty panel buttons to add; leaving toolbar unchanged")
+
+    def _load_custom_panel(self, panel_name, node):
+        try:
+            mod_path, class_name = panel_name.rsplit(".", 1)
+
+            # Normalize to PascalCase class name
+            class_name = "".join(part.capitalize() for part in class_name.split("_"))
+
+            # Import the full module, not just the package
+            full_mod = f"matrix_gui.core.panel.custom_panels.{mod_path}.{panel_name.split('.')[-1]}"
+            mod = __import__(full_mod, fromlist=[class_name])
+
+            PanelClass = getattr(mod, class_name)
+            return PanelClass(session_id=self.session_id, bus=self.bus, node=node)
+
+        except Exception as e:
+            emit_gui_exception_log("SessionWindow._load_custom_panel", e)
+            return None
 
     def _build_inspector_panel(self):
         self.detail_panel = AgentDetailPanel(session_id=self.session_id, bus=self.bus)
@@ -155,23 +217,43 @@ class SessionWindow(QMainWindow):
         self.detail_panel.config_group.setVisible(False)
         return self.detail_panel
 
+    def show_default_panel(self):
+        self.stacked.setCurrentWidget(self.default_panel)
+        self.control_bar.reset_to_default()
+
+    def show_specialty_panel(self, panel: QWidget):
+        if self.stacked.currentWidget() == panel:
+            print("[DEBUG] Panel already active, skipping reset")
+            return
+        if self.stacked.indexOf(panel) == -1:
+            self.stacked.addWidget(panel)
+        self.stacked.setCurrentWidget(panel)
+
+        self.control_bar.clear_buttons()
+        if hasattr(panel, "get_panel_buttons"):
+            buttons = panel.get_panel_buttons()
+            print(f"[DEBUG] get_panel_buttons returned {len(buttons)} items: {[b.text for b in buttons]}")
+            for btn in buttons:
+                print(f"[DEBUG] Adding button: {btn.text} (icon={btn.icon})")
+                self.control_bar.add_button(btn.icon, btn.text, btn.handler)
+        else:
+            print("[DEBUG] Panel has no get_panel_buttons()")
+
+        # Always add Home
+        self.control_bar.add_button("🏠", "Home", self.show_default_panel)
+        print("[DEBUG] Added Home button")
+
 
     def _build_log_panel(self):
         box = QGroupBox("📄 Agent Logs")
-        box.setStyleSheet("""
-            QGroupBox {
-                font-weight: bold;
-                padding: 4px;
-                margin: 2px;
-                border: 1px solid #888;
-                border-radius: 4px;
-            }
-        """)
+
         layout = QVBoxLayout()
+        layout.setContentsMargins(6, 4, 6, 4)
+        layout.setSpacing(4)
 
         # Status line inside the box
-        self.log_status_label = QLabel("Agent Logs: —")
-        self.log_status_label.setStyleSheet("padding: 2px;")
+        from matrix_gui.theme.utils.hive_ui import StatusLabel
+        self.log_status_label = StatusLabel("Agent Logs: —")
         layout.addWidget(self.log_status_label)
 
         # The actual log view
@@ -184,62 +266,21 @@ class SessionWindow(QMainWindow):
 
     def _setup_main_layout(self, main_layout):
         right_column = QVBoxLayout()
+        right_column.setContentsMargins(0, 0, 0, 0)
+        right_column.setSpacing(0)
         right_column.addWidget(self.detail_panel.inspector_group)
         right_column.addWidget(self.detail_panel.config_group)
         right_column.addWidget(self.console_wrapper)
 
         right_panel = QWidget()
         right_panel.setLayout(right_column)
+        right_column.setContentsMargins(0, 0, 0, 0)
+        right_column.setSpacing(0)
 
         main_layout.addWidget(self.tree_wrapper)
         main_layout.addWidget(right_panel)
         main_layout.setStretch(0, 1)
         main_layout.setStretch(1, 3)
-
-    # --- Controls ---
-    def _make_controls(self):
-        bar = QToolBar("Deployment Controls", self)
-        self.addToolBar(Qt.TopToolBarArea, bar)
-
-        # Kill
-        delete_act = QAction("☠️ Delete Agent", self)
-        delete_act.triggered.connect(self._launch_delete_agent_modal)
-        bar.addAction(delete_act)
-
-
-        # Replace Source
-        replace_src_act = QAction("♻️ Replace Source", self)
-        replace_src_act.triggered.connect(self._launch_replace_agent_source)
-        bar.addAction(replace_src_act)
-
-        # Restart Agent
-        #restart_act = QAction("🔁 Restart Agent", self)
-        #restart_act.setToolTip("Restart this agent after replacing its source.")
-        #restart_act.triggered.connect(self._launch_restart_agent)
-        #bar.addAction(restart_act)
-
-        # Threads toggle
-        self.toggle_threads = QAction("🧵 Threads", self)
-        self.toggle_threads.setCheckable(True)
-        self.toggle_threads.setToolTip("Threads & Processes")
-        self.toggle_threads.triggered.connect(
-            lambda checked: self.detail_panel.inspector_group.setVisible(checked)
-        )
-        bar.addAction(self.toggle_threads)
-
-        # Config toggle
-        self.toggle_config = QAction("⚙️ Config", self)
-        self.toggle_config.setCheckable(True)
-        self.toggle_config.triggered.connect(
-            lambda checked: self.detail_panel.config_group.setVisible(checked)
-        )
-        bar.addAction(self.toggle_config)
-
-        # Pause Logs
-        self.pause_btn = QAction("⏸️ Pause Logs", self)
-        self.pause_btn.setCheckable(True)
-        self.pause_btn.triggered.connect(self._toggle_log_pause)
-        bar.addAction(self.pause_btn)
 
     # --- Delete Agent ---
     def _launch_delete_agent_modal(self):

@@ -27,7 +27,7 @@ class AgentDetailPanel(QWidget):
 
             #Agent Detail
             self.label = QLabel("Agent: -  Universal ID: -  Spawn Count: -  Flip-Tripping: -")
-            self.label.setStyleSheet("padding-top: 8px;padding-bottom: 4px;")
+            self.label.setObjectName("agentHeader")
 
             self.inspector_group.layout().addWidget(self.label)
 
@@ -37,20 +37,21 @@ class AgentDetailPanel(QWidget):
             self.thread_table.setHorizontalHeaderLabels(["Thread", "Status", "Delta"])
             self.thread_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
             self.thread_table.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-            inspector_layout.addWidget(QLabel("🧵 Threads & Processes"))
+            thread_title = QLabel("🧵 Threads & Processes")
+            inspector_layout.addWidget(thread_title)
             inspector_layout.addWidget(self.thread_table)
+            self.layout.setContentsMargins(6, 6, 6, 6)
+            self.layout.setSpacing(8)
 
-            inspector_layout.addWidget(QLabel("🐣 Spawns"))
+
+            spawn_title = QLabel("🐣 Spawns")
+            inspector_layout.addWidget(spawn_title)
             self.spawn_table = QTableWidget()
             self.spawn_table.setColumnCount(2)
             self.spawn_table.setHorizontalHeaderLabels(["Timestamp", "Note"])
             self.spawn_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
             self.spawn_table.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
             inspector_layout.addWidget(self.spawn_table)
-
-
-
-
 
             self._closing = False
 
@@ -69,6 +70,11 @@ class AgentDetailPanel(QWidget):
             self.export_btn.clicked.connect(self._copy_config)
             btn_row.addWidget(self.export_btn)
             config_layout.addLayout(btn_row)
+            inspector_layout.setContentsMargins(6, 6, 6, 6)
+            inspector_layout.setSpacing(6)
+            config_layout.setContentsMargins(6, 6, 6, 6)
+            config_layout.setSpacing(6)
+
 
             # Add both sections to the main panel
             self.layout.addWidget(self.inspector_group)
@@ -77,8 +83,6 @@ class AgentDetailPanel(QWidget):
             self.layout.setStretch(1, 1)  # tree
             self.layout.setStretch(2, 2)  # panel
 
-            self.inspector_group.setStyleSheet("QGroupBox { font-weight: bold; padding: 6px; margin-top: 8px; }")
-            self.config_group.setStyleSheet("QGroupBox { font-weight: bold; padding: 6px; margin-top: 6px; }")
             self.inspector_group.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
             self.config_group.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
 

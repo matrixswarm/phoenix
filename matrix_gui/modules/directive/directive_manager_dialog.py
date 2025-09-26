@@ -498,7 +498,7 @@ class DirectiveManagerDialog(QDialog):
 
             # step 9. Choose save location (default under /deploy/)
             cwd = Path.cwd()  # This is your working directory (repo root if you launch Phoenix there)
-            deploy_dir = cwd / "matrix" / "boot_directives"
+            deploy_dir = cwd / "boot_directives"
             deploy_dir.mkdir(parents=True, exist_ok=True)
 
             keys_dir = deploy_dir / "keys"

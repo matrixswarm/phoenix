@@ -22,9 +22,13 @@ class PhoenixAgentTree(QWidget):
 
             # === Layout
             layout = QVBoxLayout()
+            layout.setContentsMargins(6, 4, 0, 4)
+
+            layout.setSpacing(4)
             self.setLayout(layout)
 
-            self.status_label = QLabel("Agent Tree: ⏳ Loading...")
+            self.status_label = QLabel("⏳ Loading…")
+            self.status_label.setObjectName("status")  # use same QSS rule as log status
             layout.addWidget(self.status_label)
 
             self._last_payload_hash = None
@@ -43,6 +47,7 @@ class PhoenixAgentTree(QWidget):
             #context menu, right click, popup
             self.tree.setContextMenuPolicy(Qt.CustomContextMenu)
             self.tree.customContextMenuRequested.connect(self._on_context_menu)
+            self.tree.setContentsMargins(0, 0, 0, 0)
 
             layout.addWidget(self.tree)
 
@@ -93,7 +98,10 @@ class PhoenixAgentTree(QWidget):
                 }
             })
 
-            self.bus.emit("gui.agent.selected", session_id=self.session_id, node=node)
+            ui_cfg = node.get("config", {}).get("ui", {})
+            panels = ui_cfg.get("panel", [])
+
+            self.bus.emit("gui.agent.selected", session_id=self.session_id, node=node, panels=panels)
             self.bus.emit("gui.log.token.updated", session_id=self.session_id, token=token, agent_title=node.get("name", uid))
             self.bus.emit("outbound.message", session_id=self.session_id, channel="outgoing.command", packet=pk)
 
@@ -126,7 +134,7 @@ class PhoenixAgentTree(QWidget):
         try:
             ts = self._last_tree_update_ts or time.time()
             time_str = datetime.datetime.fromtimestamp(ts).strftime("%H:%M:%S")
-            self.status_label.setText(f"Agent Tree: ✅ Updated at {time_str}")
+            self.status_label.setText(f"Updated at {time_str}")
         except Exception as e:
             emit_gui_exception_log("PhoenixAgentTree._update_status_label", e)
 
@@ -155,9 +163,26 @@ class PhoenixAgentTree(QWidget):
                     flip_marker = f"    ⚠"
 
                 # Icon + Title
-                icon = "🧬" if children else "🔹"
-                title = f"{icon} {base} ({child_count}){flip_marker}" if children else f"{icon} {base}{flip_marker}"
+                ui_cfg = node.get("config", {}).get("ui", {})
+                tree_ui = ui_cfg.get("agent_tree", {})
 
+                emoji = tree_ui.get("emoji")
+                icon_path = tree_ui.get("icon")
+
+                # Decide prefix
+                if emoji:
+                    prefix = emoji
+                elif icon_path:
+                    # for now just show the icon path text, or use QIcon if you wire it in
+                    prefix = "🖼"
+                else:
+                    prefix = "🧬" if children else "🔹"
+
+                # Build title
+                if children:
+                    title = f"{prefix} {base} ({child_count}){flip_marker}"
+                else:
+                    title = f"{prefix} {base}{flip_marker}"
 
                 # Create the tree item
                 item = QTreeWidgetItem([title])
