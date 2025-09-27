@@ -132,6 +132,12 @@ matrix_directive = {
               "universal_id": "npc-simulator-1",
               "name": "npc_simulator",
               "app": "swarm-core",
+              "tags": {
+                "packet_signing": {
+                    "in": True,
+                    "out": True
+                }
+              },
               "config": {
                 "grid_size": 20,
                 "npc_count": 100,

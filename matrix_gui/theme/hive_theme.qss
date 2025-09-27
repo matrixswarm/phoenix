@@ -85,7 +85,7 @@ QPushButton#danger {
     color: #b53c33;
 }
 QPushButton#danger:hover, QPushButton#danger:focus {
-    border: 2px solid #
+    border: 1px solid #
 }
 
 QGroupBox {
