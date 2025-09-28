@@ -3,8 +3,14 @@ from PyQt5.QtWidgets import QWidget, QVBoxLayout, QLabel, QGridLayout, QPushButt
 from matrix_gui.core.class_lib.packet_delivery.packet.standard.command.packet import Packet
 from matrix_gui.core.panel.control_bar import PanelButton
 from matrix_gui.core.emit_gui_exception_log import emit_gui_exception_log
+from PyQt5.QtMultimedia import QSoundEffect
+from PyQt5.QtCore import QUrl
+
 from PyQt5.QtCore import QThread, QMetaObject, Qt, pyqtSlot, Q_ARG
 from PyQt5.QtWidgets import QApplication
+from PyQt5.QtCore import QTimer
+from collections import deque
+
 class Gameboard(QWidget):
     cache_panel = True
 
@@ -16,7 +22,15 @@ class Gameboard(QWidget):
             self.bus = bus
             self.node = node
             self.parent = session_window
+            self.last_seen_player = None
             self._initialized = False
+            self._resizing = False
+            self._frame_queue = deque(maxlen=5)
+
+            self.cowbell_sound = QSoundEffect()
+            self.cowbell_sound.setSource(QUrl.fromLocalFile("matrix_gui/resources/sounds/cowbell.wav"))
+            self.cowbell_sound.setLoopCount(1)  # already has 4 hits
+            self.cowbell_sound.setVolume(0.9)
 
             if not self._initialized:
                 self.last_player_pos = (0, 0)
@@ -83,23 +97,27 @@ class Gameboard(QWidget):
             emit_gui_exception_log("Gameboard._build_layout", e)
 
     def _update_grid(self, player_pos, npc_list):
-        # Make sure we’re on the GUI thread
         if QThread.currentThread() != QApplication.instance().thread():
-            print("[GRID] ⚠️ Update attempted from non-GUI thread. Scheduling safely.")
-            QMetaObject.invokeMethod(
-                self,
-                "_update_grid_safe",
-                Qt.QueuedConnection,
-                Q_ARG(object, player_pos),
-                Q_ARG(object, npc_list)
-            )
+            self._pending_frame = (player_pos, npc_list)
+            if not hasattr(self, "_frame_timer"):
+                self._frame_timer = QTimer()
+                self._frame_timer.setSingleShot(True)
+                self._frame_timer.timeout.connect(self._flush_pending_frame)
+            if not self._frame_timer.isActive():
+                self._frame_timer.start(50)  # flush in 50ms
             return
-
-        # Already on GUI thread, call safe directly
         self._update_grid_safe(player_pos, npc_list)
+
+    def _flush_pending_frame(self):
+        if hasattr(self, "_pending_frame"):
+            px, npcs = self._pending_frame
+            self._update_grid_safe(px, npcs)
+            del self._pending_frame
+
 
     @pyqtSlot(object, object)
     def _update_grid_safe(self, player_pos, npc_list):
+        self.setUpdatesEnabled(False)
         try:
             grid_size = self.grid_size
             seen = set()
@@ -121,6 +139,16 @@ class Gameboard(QWidget):
             if 0 <= px < grid_size and 0 <= py < grid_size:
                 self.cells[py][px].setText("@")
                 self.cells[py][px].setStyleSheet("border: 1px solid #555; background: #444; color: #0f0;")
+
+            # Draw last seen player position (if enabled)
+            if (
+                    getattr(self, "last_seen_player", None) is not None
+                    and isinstance(self.last_seen_player, (list, tuple))
+                    and self._is_valid_cell(*self.last_seen_player)
+            ):
+                lx, ly = self.last_seen_player
+                self.cells[ly][lx].setText("X")
+                self.cells[ly][lx].setStyleSheet("border: 1px solid #f00; background: #300; color: #f44;")
 
             # Draw NPCs
             for npc in npc_list:
@@ -166,6 +194,15 @@ class Gameboard(QWidget):
         except Exception as e:
             emit_gui_exception_log("Gameboard._update_grid", e)
 
+        finally:
+            self.setUpdatesEnabled(True)
+            self.update()
+
+    def resizeEvent(self, event):
+        self._resizing = True
+        super().resizeEvent(event)
+        self._resizing = False
+
     def _is_valid_cell(self, x, y):
         """Check if x and y are within grid bounds."""
         if x is None or y is None:
@@ -188,10 +225,18 @@ class Gameboard(QWidget):
         self._send_action("scatter")
 
 
-    def ping_clicked(self): print("[NPC] Ping!")
-    def shield_clicked(self): print("[NPC] Shield up!")
-    def lock_clicked(self): print("[NPC] Lock!")
-    def cowbell_clicked(self): print("[COWBELL] More Cowbell!!! 🚨🔔🐄")
+    def ping_clicked(self):
+        self._send_action("ping")
+
+    def shield_clicked(self):
+        self._send_action("shield")
+
+    def lock_clicked(self):
+        self._send_action("lock")
+
+    def cowbell_clicked(self):
+        self.cowbell_sound.play()
+        print("[COWBELL] More Cowbell!!! 🚨🔔🐄")
 
     def _send_action(self, action):
 
@@ -239,18 +284,53 @@ class Gameboard(QWidget):
     def stop_stream_clicked(self):
         self._send_command("cmd_stop_npc_stream", service="npc.swarm.stream.stop")
 
-    def _handle_gameboard_response(self, session_id, channel, source, payload, ts=None, **_):
 
+    @pyqtSlot()
+    def _drain_frame_queue(self):
+        if not self._frame_queue:
+            return
+
+        # get the latest frame (drop older ones if multiple stacked)
+        player_pos, npc_list = self._frame_queue.pop()
+        self._frame_queue.clear()  # discard leftovers
+
+        # safe draw
+        self._update_grid_safe(player_pos, npc_list)
+
+    @pyqtSlot()
+    def _drain_frame_queue(self):
+        try:
+            if not self._frame_queue:
+                return
+
+            # take the newest frame, discard the rest
+            player_pos, npc_list = self._frame_queue.pop()
+            self._frame_queue.clear()
+
+            # safe draw
+            self._update_grid_safe(player_pos, npc_list)
+            self.update()
+            self.repaint()
+
+        except Exception as e:
+            emit_gui_exception_log("Gameboard._drain_frame_queue", e)
+
+    def _handle_gameboard_response(self, session_id, channel, source, payload, ts=None, **_):
         try:
             data = payload.get("content", {})
             print(f"[GAMEBOARD] 📨 Session={session_id} Data={data}")
 
-            self.last_player_pos = data.get("player_pos", (0, 0))
-            self.last_npc_list = data.get("npc_list", [])
-            self.has_drawn = True  # mark that we’ve got a valid frame
-            self._update_grid(self.last_player_pos, self.last_npc_list)
-            self.update()  # Ask Qt to schedule a repaint
-            self.repaint()  # Force an immediate repaint (for good measure)
+            player_pos = data.get("player_pos", (0, 0))
+            npc_list = data.get("npc_list", [])
+            self.last_player_pos = player_pos
+            self.last_npc_list = npc_list
+            self.has_drawn = True
+
+            # enqueue frame
+            self._frame_queue.append((player_pos, npc_list))
+
+            # schedule the consumer to run on GUI thread
+            QMetaObject.invokeMethod(self, "_drain_frame_queue", Qt.QueuedConnection)
 
         except Exception as e:
             emit_gui_exception_log("Gameboard._handle_gameboard_response", e)
@@ -311,3 +391,4 @@ class Gameboard(QWidget):
 
         except Exception as e:
             emit_gui_exception_log("Gameboard._send_command", e)
+
