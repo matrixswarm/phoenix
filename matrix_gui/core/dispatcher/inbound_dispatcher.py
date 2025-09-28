@@ -96,5 +96,7 @@ class InboundDispatcher:
                 ts=ts,
             )
 
+            print(f"emmited: inbound.verified.{scoped_handler}")
+
         except Exception as e:
             print(f"[INBOUND] ❌ Verification/decrypt failed: {e}")

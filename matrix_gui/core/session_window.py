@@ -72,6 +72,8 @@ class SessionWindow(QMainWindow):
             self.inbound = inbound
             self.outbound = outbound
 
+            self._panel_cache = {}
+
             self.active_log_token = None
             self.log_paused = False
             self.last_log_ts = None
@@ -198,17 +200,26 @@ class SessionWindow(QMainWindow):
 
     def _load_custom_panel(self, panel_name, node):
         try:
+
+            cache_key = panel_name
+
+            if cache_key in getattr(self, "_panel_cache", {}):
+                return self._panel_cache[cache_key]
+
+
             mod_path, class_name = panel_name.rsplit(".", 1)
-
-            # Normalize to PascalCase class name
             class_name = "".join(part.capitalize() for part in class_name.split("_"))
-
-            # Import the full module, not just the package
             full_mod = f"matrix_gui.core.panel.custom_panels.{mod_path}.{panel_name.split('.')[-1]}"
             mod = __import__(full_mod, fromlist=[class_name])
-
             PanelClass = getattr(mod, class_name)
-            return PanelClass(session_id=self.session_id, bus=self.bus, node=node)
+
+            panel = PanelClass(session_id=self.session_id, bus=self.bus, node=node, session_window=self)
+
+            # only cache if the panel opts in
+            if getattr(PanelClass, "cache_panel", False):
+                self._panel_cache[cache_key] = panel
+
+            return panel
 
         except Exception as e:
             emit_gui_exception_log("SessionWindow._load_custom_panel", e)

@@ -3,13 +3,12 @@ from PyQt5.QtCore import Qt
 from matrix_gui.core.panel.control_bar import PanelButton
 
 class Config(QWidget):
-    def __init__(self, session_id, bus=None, node=None, parent=None):
-        super().__init__(parent)
-
+    def __init__(self, session_id, bus=None, node=None, session_window=None):
+        super().__init__(session_window)
         self.session_id = session_id
         self.bus = bus
         self.node = node
-
+        self.parent = session_window
         layout = QVBoxLayout()
         layout.setContentsMargins(10, 10, 10, 10)
         layout.setSpacing(8)
@@ -30,3 +29,8 @@ class Config(QWidget):
         layout.addWidget(info)
         layout.addWidget(placeholder)
         self.setLayout(layout)
+
+    def get_panel_buttons(self):
+        return [
+            PanelButton("⚙️", "Settings", lambda: print("[NPC] Config clicked"))
+        ]

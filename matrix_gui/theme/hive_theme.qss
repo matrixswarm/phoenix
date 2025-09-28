@@ -133,3 +133,140 @@ QLabel#agentHeader {
     font-size: 12px;
     color: #eee;
 }
+QPushButton, QToolButton {
+    background: #22252a;
+    color: #90fa77;
+    border-radius: 7px;
+    padding: 7px 18px;
+    font-size: 11pt;
+    font-weight: 500;
+}
+QPushButton:hover, QToolButton:hover {
+    background: #293033;
+    border: 1.5px solid #90fa77;
+    color: #fff;
+}
+QFrame#matrixCard {
+    background: #20232a;
+    border-radius: 12px;
+    border: 1.5px solid #393e46;
+    padding: 16px 20px 16px 20px;
+    /* Optional: */
+    /* box-shadow: 0 2px 24px rgba(100,255,120,0.10); */
+}
+QFrame#toolbarFrame {
+    background: #23272e;
+    border-radius: 10px;
+    border: 1.5px solid #303640;
+    margin-bottom: 16px;
+    padding: 10px 12px 10px 16px;
+}
+QPushButton, QToolButton {
+    background: #24282e;
+    color: #90fa77;
+    border-radius: 7px;
+    border: 1px solid #353940;
+    padding: 7px 18px;
+    font-size: 11pt;
+    font-weight: 500;
+}
+QPushButton:hover, QToolButton:hover {
+    background: #2a3033;
+    border: 1.5px solid #90fa77;
+    color: #fff;
+}
+
+QFrame#matrixCard {
+    background: #20232a;
+    border-radius: 12px;
+    border: 1.5px solid #393e46;
+    padding: 16px 20px 16px 20px;
+}
+
+QTreeWidget, QTextEdit {
+    background: transparent;
+    border: none;
+    color: #e8eaed;
+    font-size: 10.5pt;
+}
+
+QLabel {
+    color: #90fa77;
+    font-weight: 600;
+}
+
+QPushButton, QToolButton {
+    background: #24282e;
+    color: #90fa77;
+    border-radius: 7px;
+    border: 1px solid #353940;
+    padding: 7px 18px;
+    font-size: 11pt;
+    font-weight: 500;
+}
+QPushButton:hover, QToolButton:hover {
+    background: #2a3033;
+    border: 1.5px solid #90fa77;
+    color: #fff;
+}
+/* --- Global --- */
+QMainWindow, QWidget {
+    background: #21252b;
+    color: #e8eaed;
+    font-family: "Segoe UI", Arial, sans-serif;
+    font-size: 10.5pt;
+}
+
+/* --- Cockpit Title --- */
+QLabel#cockpitTitle {
+    font-size: 20pt;
+    font-weight: 800;
+    color: #90fa77;
+    letter-spacing: 1px;
+    text-shadow: 0 0 8px #053e1e;
+    padding: 4px 0;
+}
+
+/* --- Section Headers (Deployments, Swarm Feed, etc.) --- */
+QLabel#sectionHeader {
+    font-size: 13pt;
+    font-weight: 700;
+    color: #90fa77;
+    padding-bottom: 6px;
+}
+
+/* --- Card Panels --- */
+QFrame#matrixCard, QFrame#deployBarCard {
+    background: #23272e;
+    border-radius: 10px;
+    border: 1.5px solid #393e46;
+    padding: 10px 14px;
+}
+
+/* --- Deploy Bar Buttons + ComboBox --- */
+QWidget#matrixDeployBar QPushButton,
+QWidget#matrixDeployBar QComboBox {
+    background: #2a2e36;
+    color: #90fa77;
+    border: 1px solid #444;
+    border-radius: 6px;
+    padding: 5px 12px;
+    font-size: 10.5pt;
+    font-weight: 600;
+    margin-right: 6px;
+}
+
+QWidget#matrixDeployBar QPushButton:hover,
+QWidget#matrixDeployBar QComboBox:hover {
+    background: #323842;
+    border: 1px solid #90fa77;
+    color: #ffffff;
+}
+
+/* --- Drop-down list styling --- */
+QWidget#matrixDeployBar QComboBox QAbstractItemView {
+    background: #181a20;
+    color: #90fa77;
+    selection-background-color: #333;
+    selection-color: #fff;
+}

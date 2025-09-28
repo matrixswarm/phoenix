@@ -150,18 +150,22 @@ matrix_directive = {
                     ],
                 },
                 "service-manager": [{
-                  "role": [
-                    "npc.swarm.control@cmd_control_npcs",
-                    "npc.swarm.status@cmd_report_status"
-                  ],
-                  "scope": ["parent", "any"],
-                  "priority": {
-                    "npc.swarm.control": 1,
-                    "npc.swarm.status": 1,
-                    "default": 10
-                  },
-                  "exclusive": False
-                }]
+                      "role": [
+                        "npc.swarm.control@cmd_control_npcs",
+                        "npc.swarm.status@cmd_report_status",
+                        "npc.swarm.stream.start@cmd_start_npc_stream",
+                        "npc.swarm.stream.stop@cmd_stop_npc_stream"
+                      ],
+                      "scope": ["parent", "any"],
+                      "priority": {
+                        "npc.swarm.control": 1,
+                        "npc.swarm.status": 1,
+                        "npc.swarm.stream.start": 1,
+                        "npc.swarm.stream.stop": 1,
+                        "default": 10
+                      },
+                      "exclusive": False
+                    }]
               }
             },
             {

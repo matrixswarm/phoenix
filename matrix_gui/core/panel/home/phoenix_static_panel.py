@@ -1,4 +1,4 @@
-from PyQt5.QtWidgets import QWidget, QVBoxLayout, QLabel, QTextEdit, QGroupBox
+from PyQt5.QtWidgets import QWidget, QVBoxLayout, QTextEdit, QGroupBox
 from matrix_gui.core.class_lib.feed.feed_formatter import FeedFormatter
 from PyQt5.QtWidgets import QTreeWidget, QTreeWidgetItem, QMenu
 from PyQt5.QtCore import Qt

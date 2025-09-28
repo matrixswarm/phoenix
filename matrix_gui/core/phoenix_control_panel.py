@@ -1,6 +1,6 @@
 import uuid
 import matrix_gui.resources.resources_rc
-from PyQt5.QtWidgets import QWidget, QHBoxLayout, QLabel, QPushButton, QMessageBox, QSizePolicy
+from PyQt5.QtWidgets import QWidget, QHBoxLayout, QLabel, QPushButton, QMessageBox
 from PyQt5 import QtCore
 from PyQt5.QtGui import QIcon, QPixmap
 from PyQt5.QtWidgets import QComboBox
