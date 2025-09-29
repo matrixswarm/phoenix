@@ -55,7 +55,6 @@ class ConnectionAssignmentDialog(QDialog):
         layout.addLayout(btn_row)
 
     def _check_row(self, wrapper, cb, lbl):
-        from matrix_gui.modules.directive.maps.base import CERT_INJECTION_MAP
 
         data = cb.currentData()
         if not data:

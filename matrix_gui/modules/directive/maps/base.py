@@ -19,11 +19,11 @@ CERT_INJECTION_MAP = {
     "connection": {
         'wss':{
             "target": ["config"],
-            "fields": ["port", "allowlist_ips"]
+            "fields": ["port"]
         },
         'https':{
             "target": ["config"],
-            "fields": ["port", "allowlist_ips"]
+            "fields": ["port"]
         },
         'discord':{
             "target": ["config"],
@@ -36,6 +36,10 @@ CERT_INJECTION_MAP = {
         'openai': {
             "target": ["config"],
             "fields": ["api_key"],
+        },
+        "slack": {
+            "target": ["config"],
+            "fields": ["webhook_url"],
         },
     },
 

@@ -52,8 +52,6 @@ def on_connect(dep_id=None, vault_data=None, **kwargs):
         emit_gui_exception_log("deployment_connector.on_connect", e)
         return {}
 
-
-
 def _connect_single(deployment, dep_id):
 
     try:

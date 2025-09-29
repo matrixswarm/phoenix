@@ -62,6 +62,7 @@ class HTTPSConnector(BaseConnector):
             self._set_status("connecting")
             inner = packet.get_packet()
             inner["ts"] = int(time.time())
+            inner["session_id"] = self.session_id
 
             # Sign with vault private key
             dep = self.deployment or {}

@@ -92,6 +92,28 @@ matrix_directive = {
             }
           },
           {
+            "universal_id": "slack-it-out-1",
+            "name": "slack_relay",
+            "enabled": False,
+            "tags": {
+                "connection": {
+                    "proto": "slack"
+                },
+            },
+            "config": {
+
+                "ui": {
+                    "agent_tree": {"emoji": "💬"},
+                },
+                "service-manager": [{
+                    "role": ["hive.alert@cmd_send_alert_msg"],
+                    "scope": ["parent", "any"],
+
+                }]
+
+            }
+          },
+          {
             "universal_id": "websocket-relay",
             "name": "matrix_websocket",
             "tags": {
