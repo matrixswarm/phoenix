@@ -1,5 +1,6 @@
+# Authored by Daniel F MacDonald and ChatGPT-5 aka The Generals
 import uuid, time
-from PyQt5.QtWidgets import QWidget, QVBoxLayout, QLabel, QGridLayout, QPushButton, QHBoxLayout
+from PyQt5.QtWidgets import QVBoxLayout, QLabel, QGridLayout, QPushButton, QHBoxLayout
 from matrix_gui.core.class_lib.packet_delivery.packet.standard.command.packet import Packet
 from matrix_gui.core.panel.control_bar import PanelButton
 from matrix_gui.core.emit_gui_exception_log import emit_gui_exception_log
@@ -10,37 +11,56 @@ from PyQt5.QtCore import QThread, QMetaObject, Qt, pyqtSlot, Q_ARG
 from PyQt5.QtWidgets import QApplication
 from PyQt5.QtCore import QTimer
 from collections import deque
+from matrix_gui.core.panel.custom_panels.interfaces.base_panel_interface import PhoenixPanelInterface
 
-class Gameboard(QWidget):
+class Gameboard(PhoenixPanelInterface):
     cache_panel = True
 
     def __init__(self, session_id, bus=None, node=None, session_window=None):
-        super().__init__(session_window)
-
+        super().__init__(session_id, bus, node=node, session_window=session_window)
         try:
-            self.session_id = session_id
-            self.bus = bus
-            self.node = node
-            self.parent = session_window
-            self.last_seen_player = None
+            # … keep the rest of your initialization …
             self._initialized = False
             self._resizing = False
             self._frame_queue = deque(maxlen=5)
 
-            self.cowbell_sound = QSoundEffect()
-            self.cowbell_sound.setSource(QUrl.fromLocalFile("matrix_gui/resources/sounds/cowbell.wav"))
-            self.cowbell_sound.setLoopCount(1)  # already has 4 hits
-            self.cowbell_sound.setVolume(0.9)
-
             if not self._initialized:
-                self.last_player_pos = (0, 0)
-                self.last_npc_list = []
+                self.cowbell_sound = QSoundEffect()
+                self.cowbell_sound.setSource(QUrl.fromLocalFile("matrix_gui/resources/sounds/cowbell.wav"))
+                self.cowbell_sound.setLoopCount(1)  # already has 4 hits
+                self.cowbell_sound.setVolume(0.9)
                 self.setLayout(self._build_layout())
                 self._connect_signals()
                 self._initialized = True
 
         except Exception as e:
             emit_gui_exception_log("Gameboard.__init__", e)
+
+    def _connect_signals(self):
+        if getattr(self, "_signals_connected", False):
+            return
+        scoped_handler = f"inbound.verified.npc_simulator.gameboard.response.{self.session_id}"
+        self.bus.on(scoped_handler, self._handle_gameboard_response)
+        self._signals_connected = True
+        print(f"[GAMEBOARD] 🎧 Listening on {scoped_handler}")
+
+    def _disconnect_signals(self):
+        if getattr(self, "_signals_connected", False):
+            scoped_handler = f"inbound.verified.npc_simulator.gameboard.response.{self.session_id}"
+            self.bus.off(scoped_handler, self._handle_gameboard_response)
+            self._signals_connected = False
+            print(f"[GAMEBOARD] ❌ Disconnected from {scoped_handler}")
+
+    def get_panel_buttons(self):
+        return [
+            PanelButton("🎮", "NPC Panel", lambda: self.session_window.show_specialty_panel(self))
+        ]
+
+    def on_deployment_updated(self, deployment):
+        # optional: if gameboard needs to react to new deployment config
+        self.deployment = deployment
+        print("[GAMEBOARD] 🔄 Deployment updated")
+
 
     def _build_layout(self):
         try:
@@ -209,13 +229,6 @@ class Gameboard(QWidget):
             return False
         return 0 <= x < self.grid_size and 0 <= y < self.grid_size
 
-    def _connect_signals(self):
-        if getattr(self, "_signals_connected", False):
-            return
-        scoped_handler = f"inbound.verified.npc_simulator.gameboard.response.{self.session_id}"
-        self.bus.on(scoped_handler, self._handle_gameboard_response)
-        print(f"[GAMEBOARD] 🎧 Listening on {scoped_handler}")
-        print(f"[GAMEBOARD] ✅ Initialized panel for session {self.session_id}")
 
     # === Button Actions ===
     def hunt_clicked(self):
@@ -344,14 +357,6 @@ class Gameboard(QWidget):
                 self._update_grid(self.last_player_pos, self.last_npc_list)
         except Exception as e:
             emit_gui_exception_log("Gameboard.showEvent", e)
-
-    def get_panel_buttons(self):
-        try:
-            return [
-                PanelButton("🎮", "NPC Panel", lambda: self.parent.show_specialty_panel(self))
-            ]
-        except Exception as e:
-            emit_gui_exception_log("session_window._update_log_status_bar", e)
 
     def _send_command(self, cmd_handler, service, extra_payload=None):
         try:

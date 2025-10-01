@@ -7,6 +7,8 @@ from PyQt5.QtWidgets import (
 )
 #initialize bus
 import matrix_gui.config.boot.boot
+from multiprocessing import Process, Pipe
+from matrix_gui.core.session_window import run_session
 from PyQt5.QtCore import Qt, QPropertyAnimation
 from PyQt5.QtGui import QColor
 from matrix_gui.modules.vault.crypto.vault_handler import load_vault_singlefile
@@ -158,25 +160,28 @@ class PhoenixCockpit(QMainWindow):
         self.show()
 
     def launch_session(self, session_id: str, deployment: dict, vault_data: dict = None):
-        from multiprocessing import Process, Pipe
-        from matrix_gui.core.session_window import run_session
 
-        parent_conn, child_conn = Pipe()
-        p = Process(target=run_session, args=(session_id, child_conn))
-        p.start()
+        try:
+            parent_conn, child_conn = Pipe()
+            p = Process(target=run_session, args=(session_id, child_conn))
+            p.start()
 
-        parent_conn.send({
-            "type": "init",
-            "session_id": session_id,
-            "deployment": deployment,
-            "vault_data": vault_data
-        })
+            parent_conn.send({
+                "type": "init",
+                "session_id": session_id,
+                "deployment": deployment,
+                "vault_data": vault_data
+            })
 
-        self.session_processes.append({"proc": p, "conn": parent_conn})
-        self._active_sessions.add(session_id)
-        self.status_sessions.setText(f"Sessions: {len(self._active_sessions)}")
+            self.session_processes.append({"proc": p, "conn": parent_conn})
+            self._active_sessions.add(session_id)
+            self.status_sessions.setText(f"Sessions: {len(self._active_sessions)}")
 
-        print(f"[MIRV] Launched session {session_id}, pid={p.pid}")
+            print(f"[MIRV] Launched session {session_id}, pid={p.pid}")
+
+
+        except Exception as e:
+            emit_gui_exception_log("PhoenixCockpit.launch_session", e)
 
     def _start_pipe_monitor(self):
         self.pipe_timer = QTimer(self)
@@ -184,105 +189,169 @@ class PhoenixCockpit(QMainWindow):
         self.pipe_timer.start(200)
 
     def _poll_pipes(self):
-        for sess in list(self.session_processes):
-            conn = sess["conn"]
-            if conn.poll():
-                msg = conn.recv()
-                self._handle_session_msg(msg, conn)
+        try:
+            for sess in list(self.session_processes):
+                conn = sess["conn"]
+                try:
+                    if conn.poll():
+                        msg = conn.recv()
+                        self._handle_session_msg(msg, conn)
+                except (BrokenPipeError, EOFError, OSError):
+                    print(f"[MIRV] 🛑 Session pipe closed for pid={sess['proc'].pid}")
+                    self._cleanup_session(sess, conn)
+        except Exception as e:
+            emit_gui_exception_log("PhoenixCockpit._poll_pipes", e)
+
+
+    def _cleanup_session(self, sess, conn):
+        try:
+            # Remove from process list
+            self.session_processes = [s for s in self.session_processes if s["conn"] != conn]
+            # Remove from active sessions
+            self._active_sessions.discard(sess["proc"].pid)
+            self.status_sessions.setText(f"Sessions: {len(self._active_sessions)}")
+            print(f"[MIRV] 🧹 Cleaned up dead session pid={sess['proc'].pid}")
+        except Exception as e:
+            print(f"[MIRV][WARN] Failed to cleanup session: {e}")
 
     def _handle_session_msg(self, msg, conn):
         """
         Handle messages coming back from session processes.
         Ensures session counter always stays accurate.
         """
-        mtype = msg.get("type")
-        sid = msg.get("session_id")
 
-        if mtype == "ready":
-            print(f"[MIRV] Session {sid} READY")
+        try:
+            mtype = msg.get("type")
+            sid = msg.get("session_id")
 
-        elif mtype == "swarm_feed":
-            event = msg.get("event")
-            if not event:
-                print("[MIRV][WARN] swarm_feed message missing event dict:", msg)
-                return
-            if self.static_panel:
-                self.static_panel.append_feed_event(event)
+            if mtype == "ready":
+                print(f"[MIRV] Session {sid} READY")
 
-        elif mtype == "telemetry":
-            status = msg.get("status")
-            if status in ("connected", "ready", "active"):
-                self._active_sessions.add(sid)
-            elif status in ("exit", "disconnected", "error"):
-                self._active_sessions.discard(sid)
+            elif mtype == "swarm_feed":
+                event = msg.get("event")
+                if not event:
+                    print("[MIRV][WARN] swarm_feed message missing event dict:", msg)
+                    return
+                if self.static_panel:
+                    self.static_panel.append_feed_event(event)
+
+            elif mtype == "vault_update_request":
+                dep = msg.get("deployment")
+                dep_id = msg.get("deployment_id")
+                if not dep or not dep_id:
+                    print(f"[VAULT][WARN] vault_update_request missing fields: {msg}")
+                    return
+
+                # Ensure vault_data structure exists
+                self.vault_data = self.vault_data or {}
+                self.vault_data.setdefault("deployments", {})
+
+                # Merge into vault_data under correct deployment ID
+                self.vault_data["deployments"][dep_id] = dep
+                print(f"[VAULT] ✅ Deployment {dep_id} updated from session")
+
+                # Save vault to disk
+                self._handle_vault_save(self.vault_data)
+
+                # Broadcast updated deployment to all sessions (including origin)
+                for sess in self.session_processes:
+                    try:
+                        sess["conn"].send({
+                            "type": "deployment_updated",
+                            "deployment_id": dep_id,
+                            "deployment": dep,
+                        })
+                        print(f"[VAULT] 🔄 Broadcasted update to session {sess['proc'].pid}")
+                    except Exception as e:
+                        print(f"[VAULT][WARN] Failed to forward deployment update: {e}")
 
 
-            # always sync sessions label
-            self.status_sessions.setText(f"Sessions: {len(self._active_sessions)}")
+            elif mtype == "telemetry":
+                status = msg.get("status")
+                if status in ("connected", "ready", "active"):
+                    self._active_sessions.add(sid)
+                elif status in ("exit", "disconnected", "error"):
+                    self._active_sessions.discard(sid)
 
-        elif mtype == "register_cmd":
-            control = msg["control"]
-            action = msg["action"]
-            ctx = get_sessions().get(sid)
-            try:
-                mod_path = f"matrix_gui.core.factory.cmd.{control}.{action}"
-                mod = __import__(mod_path, fromlist=["*"])
-                class_name = "".join([p.capitalize() for p in action.split("_")]) + "Command"
-                CmdClass = getattr(mod, class_name)
 
-                existing = next((c for c in self.session_commands.get(sid, [])
-                                 if isinstance(c, CmdClass)), None)
+                # always sync sessions label
+                self.status_sessions.setText(f"Sessions: {len(self._active_sessions)}")
 
-                if not existing:
-                    cmd = CmdClass(sid, conn, ctx.bus)
-                    cmd.initialize()
-                    self.session_commands.setdefault(sid, []).append(cmd)
-                    print(f"[MIRV] ✅ Registered {action} for session {sid}")
-            except Exception as e:
-                print(f"[MIRV][ERROR] Failed to register cmd={action}: {e}")
-
-        elif mtype == "cmd":
-            control = msg["control"]
-            action = msg["action"]
-            try:
-                mod_path = f"matrix_gui.core.factory.cmd.{control}.{action}"
-                mod = __import__(mod_path, fromlist=["*"])
-                class_name = "".join([p.capitalize() for p in action.split("_")]) + "Command"
-                CmdClass = getattr(mod, class_name)
-                existing = next((c for c in self.session_commands.get(sid, [])
-                                 if isinstance(c, CmdClass)), None)
-                if existing:
-                    existing.fire_event(**msg)
-                    print(f"[MIRV] ✅ Executed {action} via {CmdClass.__name__}")
-            except Exception as e:
-                print(f"[MIRV][ERROR] Failed to execute cmd={action}: {e}")
-
-        elif mtype == "exit":
-            print(f"[MIRV] Session {sid} EXITED")
-
-            # Tear down commands
-            for cmd in self.session_commands.get(sid, []):
-                cmd.off_event()
-            self.session_commands.pop(sid, None)
-
-            # Remove listeners
-            for (event, handler) in self.forward_listeners.get(sid, []):
+            elif mtype == "register_cmd":
+                control = msg["control"]
+                action = msg["action"]
+                ctx = get_sessions().get(sid)
                 try:
-                    EventBus.off(event, handler)
-                    print(f"[MIRV] 🧹 Unsubscribed {event} for {sid}")
+                    mod_path = f"matrix_gui.core.factory.cmd.{control}.{action}"
+                    mod = __import__(mod_path, fromlist=["*"])
+                    class_name = "".join([p.capitalize() for p in action.split("_")]) + "Command"
+                    CmdClass = getattr(mod, class_name)
+
+                    existing = next((c for c in self.session_commands.get(sid, [])
+                                     if isinstance(c, CmdClass)), None)
+
+                    if not existing:
+                        cmd = CmdClass(sid, conn, ctx.bus)
+                        cmd.initialize()
+                        self.session_commands.setdefault(sid, []).append(cmd)
+                        print(f"[MIRV] ✅ Registered {action} for session {sid}")
                 except Exception as e:
-                    print(f"[MIRV][WARN] Could not remove listener {event} for {sid}: {e}")
-            self.forward_listeners.pop(sid, None)
+                    print(f"[MIRV][ERROR] Failed to register cmd={action}: {e}")
 
-            # Remove from active sessions + process list
-            self._active_sessions.discard(sid)
-            self.session_processes = [s for s in self.session_processes if s["conn"] != conn]
+            elif mtype == "cmd":
+                control = msg["control"]
+                action = msg["action"]
+                try:
+                    mod_path = f"matrix_gui.core.factory.cmd.{control}.{action}"
+                    mod = __import__(mod_path, fromlist=["*"])
+                    class_name = "".join([p.capitalize() for p in action.split("_")]) + "Command"
+                    CmdClass = getattr(mod, class_name)
+                    existing = next((c for c in self.session_commands.get(sid, [])
+                                     if isinstance(c, CmdClass)), None)
+                    if existing:
+                        existing.fire_event(**msg)
+                        print(f"[MIRV] ✅ Executed {action} via {CmdClass.__name__}")
+                except Exception as e:
+                    print(f"[MIRV][ERROR] Failed to execute cmd={action}: {e}")
 
-            # always sync sessions label
-            self.status_sessions.setText(f"Sessions: {len(self._active_sessions)}")
 
-        else:
-            print(f"[MIRV] Unknown msg {msg}")
+            elif mtype == "vault_update_request":
+
+                dep = msg.get("deployment")
+                dep_id = msg.get("deployment_id")
+
+                if not dep or not dep_id:
+                    print(f"[VAULT][WARN] vault_update_request missing fields: {msg}")
+                    return
+
+                # Replace the whole deployment, not shallow merge
+                self.vault_data["deployments"][dep_id] = dep
+                print(f"[VAULT] ✅ Deployment {dep_id} updated (favorites: {dep.get('terminal_favorites')})")
+                self._handle_vault_save(self.vault_data)
+                for sess in self.session_processes:
+                    try:
+                        sess["conn"].send({
+                            "type": "deployment_updated",
+                            "deployment_id": dep_id,
+                            "deployment": dep,
+                        })
+                    except Exception as e:
+                        print(f"[VAULT][WARN] Failed to broadcast: {e}")
+
+            elif mtype == "exit":
+                sid = msg.get("session_id")
+                print(f"[MIRV] 🛑 Session {sid} requested exit")
+                # remove from processes list
+                self.session_processes = [s for s in self.session_processes if s["conn"] != conn]
+                # remove from active sessions
+                self._active_sessions.discard(sid)
+                self.status_sessions.setText(f"Sessions: {len(self._active_sessions)}")
+
+            else:
+                print(f"[MIRV] Unknown msg {msg}")
+
+        except Exception as e:
+            emit_gui_exception_log("PhoenixCockpit._handle_session_msg", e)
 
     def _on_vault_unlocked_ui_flip(self, **kwargs):
 
@@ -319,46 +388,63 @@ class PhoenixCockpit(QMainWindow):
             emit_gui_exception_log("PhoenixControlPanel.launch", e)
 
     def closeEvent(self, ev):
-        print("[MIRV] Cockpit closing, nuking all session processes...")
+        try:
 
-        # Stop pipe polling first
-        if hasattr(self, "pipe_timer") and self.pipe_timer.isActive():
-            self.pipe_timer.stop()
+            print("[MIRV] Cockpit closing, nuking all session processes...")
 
-        for sess in self.session_processes:
-            proc = sess["proc"]
-            try:
-                if proc.is_alive():
-                    # try graceful close first
-                    try:
-                        sess["conn"].send({"type": "exit", "session_id": "ALL"})
-                    except Exception:
-                        pass
-                    proc.terminate()
-                    print(f"[MIRV] Terminated PID {proc.pid}")
-            except Exception as e:
-                print(f"[MIRV][ERROR] Could not kill process: {e}")
-        super().closeEvent(ev)
+            # Stop pipe polling first
+            if hasattr(self, "pipe_timer") and self.pipe_timer.isActive():
+                self.pipe_timer.stop()
+
+            for sess in self.session_processes:
+                proc = sess["proc"]
+                try:
+                    if proc.is_alive():
+                        # try graceful close first
+                        try:
+                            sess["conn"].send({"type": "exit", "session_id": "ALL"})
+                        except Exception:
+                            pass
+                        proc.terminate()
+                        print(f"[MIRV] Terminated PID {proc.pid}")
+                except Exception as e:
+                    print(f"[MIRV][ERROR] Could not kill process: {e}")
+            super().closeEvent(ev)
+
+        except Exception as e:
+            emit_gui_exception_log("PhoenixCockpit.closeEvent", e)
 
     def _handle_vault_save(self, vault_data):
         try:
             EventBus.emit("vault.update", data=vault_data,
                           password=self.vault_password,
                           vault_path=self.vault_path)
-            QMessageBox.information(self, "Vault Saved", "Vault saved via bus.")
+            print("[PHOENIX][_handle_vault_save] Vault saved via bus.")
 
         except Exception as e:
             QMessageBox.critical(self, "Save Failed", f"Vault save failed:\n{e}")
 
     def _on_vault_update(self, **kwargs):
-        self.vault_data = kwargs.get("data", self.vault_data) or {}
-        # purge null deployments
-        for dep_id in list(self.vault_data.get("deployments", {})):
-            if not isinstance(self.vault_data["deployments"][dep_id], dict):
-                print(f"[VAULT] 🚮 Purged corrupt deployment {dep_id}")
-                self.vault_data["deployments"].pop(dep_id)
-        dep_count = len(self.vault_data.get("deployments", {}))
-        self.status_deployments.setText(f"Deployments: {dep_count}")
+
+        try:
+            new_data = kwargs.get("data", self.vault_data) or {}
+            self.vault_data = self.vault_data or {}
+            self.vault_data.setdefault("deployments", {})
+
+            for dep_id, dep_val in list(new_data.get("deployments", {}).items()):
+                if dep_id not in self.vault_data["deployments"]:
+                    print(f"[VAULT][WARN] Attempted update for missing deployment {dep_id}, ignoring.")
+                    continue
+                if not isinstance(dep_val, dict):
+                    print(f"[VAULT] 🚮 Purged corrupt deployment {dep_id}")
+                    continue
+                self.vault_data["deployments"][dep_id] = dep_val
+
+            dep_count = len(self.vault_data.get("deployments", {}))
+            self.status_deployments.setText(f"Deployments: {dep_count}")
+        except Exception as e:
+            emit_gui_exception_log("PhoenixCockpit._on_vault_update", e)
+
 
     def _handle_vault_reload(self):
         EventBus.emit("vault.reopen.requested", save=False)
@@ -427,48 +513,52 @@ class PhoenixCockpit(QMainWindow):
         Cockpit does not re-load or re-emit; it just coordinates UI.
         """
         # First-run: no vault directory contents → create one
-        if not os.listdir(self.default_vault_dir):
-            init_dialog = VaultInitDialog(self)
-            if init_dialog.exec_() != init_dialog.Accepted:
-                return  # user cancelled
+        try:
+            if not os.listdir(self.default_vault_dir):
+                init_dialog = VaultInitDialog(self)
+                if init_dialog.exec_() != init_dialog.Accepted:
+                    return  # user cancelled
 
-            self.vault_path = init_dialog.vault_path
-            self.vault_password = init_dialog.vault_password
+                self.vault_path = init_dialog.vault_path
+                self.vault_password = init_dialog.vault_password
 
-            # Initialize once, set singleton, emit unlocked (keep payload for compatibility)
-            try:
-                data = load_vault_singlefile(self.vault_password, self.vault_path)
+                # Initialize once, set singleton, emit unlocked (keep payload for compatibility)
                 try:
-                    # If you have a concrete VaultObj, set it; else you can
-                    # adapt this to your VaultSingleton API.
-                    vobj = VaultObj(
-                        path=self.vault_path,
-                        vault=data,
+                    data = load_vault_singlefile(self.vault_password, self.vault_path)
+                    try:
+                        # If you have a concrete VaultObj, set it; else you can
+                        # adapt this to your VaultSingleton API.
+                        vobj = VaultObj(
+                            path=self.vault_path,
+                            vault=data,
+                            password=self.vault_password,
+                            encryptor=None,
+                            decryptor=None,
+                        )
+                        VaultSingleton.set(vobj)
+                    except Exception:
+                        # Fallback: at least clear/set a minimal state if your singleton API differs
+                        pass
+
+                    EventBus.emit(
+                        "vault.unlocked",
+                        vault_data=data,
                         password=self.vault_password,
-                        encryptor=None,
-                        decryptor=None,
+                        vault_path=self.vault_path
                     )
-                    VaultSingleton.set(vobj)
-                except Exception:
-                    # Fallback: at least clear/set a minimal state if your singleton API differs
-                    pass
+                except Exception as e:
+                    QMessageBox.critical(self, "Vault Error", f"Failed to initialize vault:\n{str(e)}")
+                return
 
-                EventBus.emit(
-                    "vault.unlocked",
-                    vault_data=data,
-                    password=self.vault_password,
-                    vault_path=self.vault_path
-                )
-            except Exception as e:
-                QMessageBox.critical(self, "Vault Error", f"Failed to initialize vault:\n{str(e)}")
+            # Normal path: unlock dialog handles decrypt + singleton + event
+            dialog = VaultPasswordDialog(self)
+            if dialog.exec_() != dialog.Accepted:
+                return
+            # Do NOT reload or re-emit here; the dialog already emitted 'vault.unlocked'.
             return
 
-        # Normal path: unlock dialog handles decrypt + singleton + event
-        dialog = VaultPasswordDialog(self)
-        if dialog.exec_() != dialog.Accepted:
-            return
-        # Do NOT reload or re-emit here; the dialog already emitted 'vault.unlocked'.
-        return
+        except Exception as e:
+            emit_gui_exception_log("PhoenixCockpit.unlock_vault", e)
 
 
 def show_with_splash(app, main_cls, delay=5000):  # 5 seconds

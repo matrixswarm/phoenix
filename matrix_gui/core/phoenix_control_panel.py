@@ -110,6 +110,9 @@ class PhoenixControlPanel(QWidget):
             QMessageBox.warning(self, "Invalid Deployment", f"Deployment {dep_id} not found in vault.")
             return
 
+        # Tag deployment with its vault id
+        deployment["id"] = dep_id
+
         # Generate a unique session ID
         session_id = str(uuid.uuid4())
 

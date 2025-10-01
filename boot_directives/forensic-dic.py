@@ -92,26 +92,6 @@ matrix_directive = {
             }
           },
           {
-            "universal_id": "slack-it-out-1",
-            "name": "slack_relay",
-            "enabled": False,
-            "tags": {
-                "connection": {
-                    "proto": "slack"
-                },
-            },
-            "config": {
-
-                "ui": {
-                    "agent_tree": {"emoji": "💬"},
-                },
-                "service-manager": [{
-                    "role": ["hive.alert@cmd_send_alert_msg"],
-                    "scope": ["parent", "any"],
-                }]
-            }
-          },
-          {
             "universal_id": "websocket-relay",
             "name": "matrix_websocket",
             "tags": {
@@ -148,84 +128,8 @@ matrix_directive = {
                     }]
                 },
             },
-            {
-              "universal_id": "npc-simulator-1",
-              "name": "npc_simulator",
-              "app": "swarm-core",
-              "tags": {
-                "packet_signing": {
-                    "in": True,
-                    "out": True
-                }
-              },
-              "config": {
-                "grid_size": 20,
-                "npc_count": 100,
-                "tick_interval_sec": 1,
-                "ui":{
-                    "agent_tree": {"emoji": "🎮", "icon": ":path_to_icon"},
-                    "panel": [
-                        "npc_simulator.gameboard",
-                        "npc_simulator.config"
-                    ],
-                },
-                "service-manager": [{
-                      "role": [
-                        "npc.swarm.control@cmd_control_npcs",
-                        "npc.swarm.status@cmd_report_status",
-                        "npc.swarm.stream.start@cmd_start_npc_stream",
-                        "npc.swarm.stream.stop@cmd_stop_npc_stream"
-                      ],
-                      "scope": ["parent", "any"],
-                      "priority": {
-                        "npc.swarm.control": 1,
-                        "npc.swarm.status": 1,
-                        "npc.swarm.stream.start": 1,
-                        "npc.swarm.stream.stop": 1,
-                        "default": 10
-                      },
-                      "exclusive": False
-                    }]
-              }
-            },
-            {
-            "universal_id": "apache_watchdog-1",
-            "name": "apache_watchdog",
-                "config": {
-                    "ui": {
-                        "agent_tree": {"emoji": "🧭️"},
-                    },
-                    "check_interval_sec": 10,
-                    "service_name": "httpd",  # change to "httpd" for RHEL/CentOS
-                    "ports": [80, 443],
-                    "restart_limit": 3,
-                    "always_alert": 1,
-                    "alert_cooldown": 300,
-                    "alert_to_role": "hive.alert",
-                    "report_to_role": "hive.forensics.data_feed",
-                },
-            },
-            {
-                "universal_id": "mysql-red-phone",
-                "name": "mysql_watchdog",
-                "config": {
-                    "ui": {
-                        "agent_tree": {"emoji": "🛢️"},
-                    },
-                    "mysql_port": 3306,
-                    "socket_path": "/var/run/mysqld/mysqld.sock",
-                    "service_name": "mariadb",
-                    "check_interval_sec": 20,
-                    "restart_limit": 3,
-                    "alert_thresholds": {
-                        "uptime_pct_min": 90,
-                        "slow_restart_sec": 10
-                    },
-                    "alert_to_role": "hive.alert",
-                    "report_to_role": "hive.forensics.data_feed",
-                }
 
-            },
+
             {
             "universal_id": "log_sentinel",
             "name": "log_sentinel",
@@ -251,99 +155,8 @@ matrix_directive = {
 
             },
           },
-            {
-                "universal_id": "terminal-1",
-                "name": "terminal_streamer",
-                "tags": {
-                    "packet_signing": {
-                        "in": True,
-                        "out": True
-                    }
-                },
-                "config": {
-                    "ui": {
-                        "agent_tree": {"emoji": "🐚"},
-                        "panel": ["terminal_streamer.stream_viewer"]
-                    },
-                    "safe_shell_mode": True,
-                    "whitelist": ["uptime", "df -h", "free -m", "whoami"],
-                    "service-manager": [
-                        {
-                            "role": ["terminal.stream.start@cmd_start_stream_terminal", "terminal.stream.stop@cmd_stop_stream_terminal"],
-                            "scope": ["parent", "any"],
-                            "priority": {
-                                "hive.proxy.route": 5,
-                                "default": 10
-                            }
-                        }
-                    ]
-                }
-            },
-          {
-            "universal_id": "invisible-man",
-            "name": "ghost_wire",
-            "config": {
-                "ui": {
-                    "agent_tree": {"emoji": "👻️"},
-                },
-                "tick_rate": 5,
-                "watch_paths": [
-                    "/etc/passwd",
-                    "/etc/shadow",
-                    "/root/.ssh",
-                    "/var/www",
-                    "/home"
-                ],
-                "command_patterns": [
-                    "rm -rf",
-                    "scp",
-                    "curl",
-                    "wget",
-                    "nano /etc",
-                    "vi /etc",
-                    "vim /etc",
-                    "sudo",
-                    "su",
-                    "chmod 777"
-                ]
-            }
-        },
-        {
-            "universal_id": "gatekeeper",
-            "name": "gatekeeper",
-            "config": {
-                "ui": {
-                    "agent_tree": {"emoji": "🚪"},
-                },
-                "log_path": "/var/log/auth.log",
-                "maxmind_db": "GeoLite2-City.mmdb",
-                "geoip_enabled": 1,
-                "always_alert": 1,
-                "alert_to_role": "hive.alert",  # They both send alerts, but report_to_role - a little more
-                #"report_to_role": "hive.forensics.data_feed"
-            }
-            ,
-            "children": []
-        },
-        {
-            "universal_id": "discord-delta-5",
-            "name": "discord_relay",
-            "tags": {
-                "connection": {
-                    "proto": "discord"
-                },
-            },
-            "config": {
-                "ui": {
-                    "agent_tree": {"emoji": "💬"},
-                },
-                "service-manager": [{
-                    "role": ["hive.alert@cmd_send_alert_msg"],
-                    "scope": ["parent", "any"],
 
-                }]
-            }
-        },
+
         {
             "universal_id": "forensic-detective-1",
             "name": "forensic_detective",
@@ -411,52 +224,7 @@ matrix_directive = {
                 "report_to_role": "hive.forensics.data_feed"
             }
         },
-        {
-            "universal_id": "redis-hammer",
-            "name": "redis_watchdog",
-            "app": "redis-core",
-            "config": {
-                "ui": {
-                    "agent_tree": {"emoji": "🎭"},
-                },
-                "check_interval_sec": 10,
-                "restart_limit": 3,
-                "redis_port": 6379,
-                "always_alert": 1,
-                "socket_path": "/var/run/redis/redis-server.sock",
-                "alert_to_role": "hive.alert",
-                "report_to_role": "hive.forensics.data_feed",
-                "service_name": "redis"
-            }
-            ,
-            "children": []
-        },
-        {
-            "universal_id": "telegram-bot-father-2",
-            "name": "telegram_relay",
-            "tags": {
-                "connection": {
-                    "proto": "telegram"
-                },
-            },
-            "config": {
-                "ui": {
-                    "agent_tree": {"emoji": "📡"},
-                },
-                "service-manager": [{
-                    "role": [
-                        "comm",
-                        "comm.security",
-                        "comm.*",
-                        "hive.alert@cmd_send_alert_msg"
-                    ],
-                    "scope": ["parent", "any"],
-                    "auth": {"sig": True},
-                    "priority": 10,
-                    "exclusive": False
-                }]
-            }
-        },
+
         {
             "universal_id": "golden-child-4",
             "name": "oracle",

@@ -13,6 +13,8 @@ from PyQt5.QtWidgets import (
 )
 from matrix_gui.core.panel.control_bar import PanelButton
 from matrix_gui.core.panel.agent_detail.agent_detail_panel import AgentDetailPanel
+from matrix_gui.core.panel.crypto_alert.crypto_alert import CryptoAlertPanel
+
 from matrix_gui.core.emit_gui_exception_log import emit_gui_exception_log
 from matrix_gui.core.panel.log_panel.log_panel import LogPanel
 from matrix_gui.core.panel.agent_tree.agent_tree import PhoenixAgentTree
@@ -29,23 +31,17 @@ from matrix_gui.core.panel.control_bar import ControlBar
 def run_session(session_id, conn):
 
     try:
+
         msg = conn.recv()
-
-        #deep copy, encase the vault is updated, you don't want to corrupt the vault data with
-        # session data, updated node
         deployment = copy.deepcopy(msg.get("deployment"))
-
-        # Create SessionContext + Bus wiring through deployment_connector
         ctx = _connect_single(deployment, deployment.get("id"))
-
-        # Launch dispatchers (tied to ctx.bus)
         inbound = InboundDispatcher(ctx.bus)
         outbound = OutboundDispatcher(ctx.bus, get_sessions(), deployment)
         ctx.inbound, ctx.outbound = inbound, outbound
 
-        # GUI launch
         app = QApplication(sys.argv)
         win = SessionWindow(
+            deployment_id=deployment.get("id"),
             session_id=ctx.id,
             cockpit_id=session_id,
             deployment=deployment,
@@ -54,16 +50,33 @@ def run_session(session_id, conn):
             inbound=inbound,
             outbound=outbound
         )
+
+        # 🔗 Add QTimer for pipe polling
+        from PyQt5.QtCore import QTimer
+        def poll_conn():
+            if conn.poll():
+                msg = conn.recv()
+                if msg.get("type") == "deployment_updated":
+                    win.handle_deployment_update(msg["deployment_id"], msg["deployment"])
+
+        timer = QTimer()
+        timer.timeout.connect(poll_conn)
+        timer.start(200)  # every 200 ms
+
         win.show()
         app.exec_()
 
     except Exception as e:
         emit_gui_exception_log("session_window.run_session", e)
 
+
 class SessionWindow(QMainWindow):
-    def __init__(self, session_id, cockpit_id, deployment, conn, bus, inbound, outbound):
+    def __init__(self, deployment_id, session_id, cockpit_id, deployment, conn, bus, inbound, outbound):
         super().__init__()
         try:
+
+            self.deployment_id=deployment_id
+
             self.conn = conn
             self.session_id = session_id
             self.cockpit_id = cockpit_id
@@ -398,6 +411,20 @@ class SessionWindow(QMainWindow):
         except Exception as e:
             emit_gui_exception_log("session_window._update_log_status_bar", e)
 
+    def show_crypto_alert_panel(self):
+        if "crypto_alert_panel" not in self._panel_cache:
+            panel = CryptoAlertPanel(
+                session_id=self.session_id,
+                bus=self.bus,
+                session_window=self
+            )
+            self._panel_cache["crypto_alert_panel"] = panel
+            self.stacked.addWidget(panel)
+        else:
+            panel = self._panel_cache["crypto_alert_panel"]
+
+        self.show_specialty_panel(panel)
+
 
     def _update_log_status_bar(self):
         try:
@@ -429,6 +456,30 @@ class SessionWindow(QMainWindow):
         except Exception as e:
             emit_gui_exception_log("session_window._update_log_status_bar", e)
 
+    def save_deployment_to_vault(self):
+        try:
+            if self.conn:
+                self.conn.send({
+                    "type": "vault_update_request",
+                    "deployment_id": self.deployment_id,
+                    "deployment": self.deployment,
+                })
+                print(f"[DEBUG] Sending favorites for {self.deployment_id}: {self.deployment.get('terminal_favorites')}")
+        except Exception as e:
+            emit_gui_exception_log("SessionWindow.save_deployment_to_vault", e)
+
+
+    def handle_deployment_update(self, dep_id, deployment):
+        try:
+            if dep_id == self.deployment_id:
+                self.deployment = copy.deepcopy(deployment)
+                print(f"[SESSION] 🔄 Deployment {dep_id} synced from cockpit")
+                for panel in self._panel_cache.values():
+                    if hasattr(panel, "on_deployment_updated"):
+                        panel.on_deployment_updated(copy.deepcopy(deployment))
+
+        except Exception as e:
+            emit_gui_exception_log("SessionWindow.handle_deployment_update", e)
 
     def closeEvent(self, ev):
         try:

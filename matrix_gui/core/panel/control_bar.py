@@ -5,6 +5,7 @@ from PyQt5.QtGui import QFont, QIcon
 from matrix_gui.core.emit_gui_exception_log import emit_gui_exception_log
 from PyQt5.QtWidgets import QToolBar
 
+
 class PanelButton:
     def __init__(self, icon, text, handler):
         self.icon = icon
@@ -122,6 +123,10 @@ class ControlBar(QWidget):
             self.default_buttons.append(
                 self._make_button("♻️", "Replace Source", self.session_window._launch_replace_agent_source))
 
+            #will be rewired soon
+            #self.default_buttons.append(
+            #    self._make_button("🔄", "Restart Agent", self.session_window._launch_restart_agent))
+
             self.default_buttons.append(
                 self._make_toggle_button(
                     "🧵", "Threads",
@@ -143,6 +148,12 @@ class ControlBar(QWidget):
                     self.session_window._toggle_log_pause
                 )
             )
+
+
+
+            #self.default_buttons.append(
+            #    self._make_button("📈", "Crypto Alerts", self.session_window.show_crypto_alert_panel)
+            #)
 
             self.reset_to_default()
 
