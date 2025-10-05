@@ -173,7 +173,12 @@ class PhoenixCockpit(QMainWindow):
                 "vault_data": vault_data
             })
 
-            self.session_processes.append({"proc": p, "conn": parent_conn})
+            self.session_processes.append({
+                "proc": p,
+                "conn": parent_conn,
+                "session_id": session_id
+            })
+
             self._active_sessions.add(session_id)
             self.status_sessions.setText(f"Sessions: {len(self._active_sessions)}")
 
@@ -202,15 +207,12 @@ class PhoenixCockpit(QMainWindow):
         except Exception as e:
             emit_gui_exception_log("PhoenixCockpit._poll_pipes", e)
 
-
     def _cleanup_session(self, sess, conn):
         try:
-            # Remove from process list
             self.session_processes = [s for s in self.session_processes if s["conn"] != conn]
-            # Remove from active sessions
-            self._active_sessions.discard(sess["proc"].pid)
+            self._active_sessions.discard(sess.get("session_id"))
             self.status_sessions.setText(f"Sessions: {len(self._active_sessions)}")
-            print(f"[MIRV] 🧹 Cleaned up dead session pid={sess['proc'].pid}")
+            print(f"[MIRV] 🧹 Cleaned up dead session {sess.get('session_id')}")
         except Exception as e:
             print(f"[MIRV][WARN] Failed to cleanup session: {e}")
 

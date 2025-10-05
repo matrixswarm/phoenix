@@ -1,10 +1,11 @@
-import os
+import os, ssl, json, time
 import uuid
 import threading
 import tempfile
 import socket
 from matrix_gui.config.boot.globals import get_sessions
-import ssl, json, time
+
+import asyncio
 from websocket import create_connection
 from matrix_gui.modules.net.entity.adapter.agent_cert_wrapper import AgentCertWrapper
 from matrix_gui.core.utils.spki_utils import verify_spki_pin
@@ -20,6 +21,24 @@ def write_temp_pem(data: str, suffix=".pem"):
     with os.fdopen(fd, "w") as f:
         f.write(data)
     return path
+
+def start_keepalive(ws, session_id):
+    def _ping():
+        while True:
+            try:
+                ws.ping("matrix-alive")   # send heartbeat only
+                print("[WSSConnector] 🔄 Sent ping to server")
+                time.sleep(20)
+            except Exception as e:
+                print(f"[WSSConnector] 🚨 Ping failed: {e}")
+                try:
+                    ws.close()
+                except Exception as inner_e:
+                    print(f"[WSSConnector] ⚠️ Error closing socket: {inner_e}")
+                break
+    threading.Thread(target=_ping, daemon=True).start()
+
+
 
 def establish_ws_connection(host, port, agent, deployment, session_id, timeout=5):
     cert_adapter = AgentCertWrapper(agent, deployment)
@@ -67,6 +86,7 @@ def establish_ws_connection(host, port, agent, deployment, session_id, timeout=5
             hello["sig"] = crypto_utils.sign_data(hello, priv_key)
 
         ws.send(json.dumps(hello))
+        start_keepalive(ws, session_id)
         return ws
 
     except Exception as e:
@@ -107,6 +127,30 @@ class WSSConnector(BaseConnector):
     def send(self, packet: Packet, timeout=10):
         print('send is not  implemented')
         pass
+
+    # === Inside Agent class ===
+    async def ping_keepalive(self, ws, sid):
+        """
+        Sends periodic pings to the client and waits for a pong.
+        Logs failures and triggers disconnect if pong isn't received.
+        """
+        try:
+            while sid in self._sessions:
+                try:
+                    pong_waiter = await ws.ping("matrix-ping")
+                    await asyncio.wait_for(pong_waiter, timeout=5)
+                    self.log(f"[WS][PONG] ✅ Pong received from session {sid}")
+                except asyncio.TimeoutError:
+                    self.log(f"[WS][PONG TIMEOUT] ❌ No pong from session {sid} — closing socket")
+                    await ws.close(reason="pong timeout")
+                    break
+                except Exception as e:
+                    self.log(f"[WS][PING ERROR] {e}")
+                    await ws.close(reason="ping error")
+                    break
+                await asyncio.sleep(10)
+        except Exception as outer_e:
+            self.log(f"[WS][KEEPALIVE] Fatal error in ping loop for session {sid}: {outer_e}")
 
     def _run_connector_loop(self, host, port, agent, deployment, session_id, channel_name):
         try:

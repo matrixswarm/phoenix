@@ -94,6 +94,44 @@ matrix_directive = {
               },
             }
           },
+            {
+                "universal_id": "wordpress-plugin-guard-1",
+                "name": "wordpress_plugin_guard",
+                "tags": {
+                    "packet_signing": {"in": True, "out": True}
+                },
+                "config": {
+                    "ui": {
+                        "agent_tree": {"emoji": "🧼"},
+                        "panel": ["wordpress_plugin_guard.plugin_guard"]
+                    },
+                    "plugin_dir": "/var/www/html/wordpress/wp-content/plugins",
+                    "quarantine_dir": "/opt/quarantine/wp_plugins",
+                    "trusted_plugins_path": "/opt/swarm/guard/trusted_plugins.json",
+                    "enforce": False,
+                    "interval": 15,
+                    "restart_php_after_quarantine": False,
+                    "alert_to_role": "hive.alert",
+                    # "report_to_role": "hive.forensics.data_feed",
+                    "service-manager": [{
+                        "role": [
+                            "plugin.guard.snapshot@cmd_snapshot_plugins",
+                            "plugin.guard.status@cmd_list_alert_status",
+                            "plugin.guard.list_plugins@cmd_list_plugins",
+                            "plugin.guard.snapshot_plugin@cmd_snapshot_plugin",
+                            "plugin.guard.snapshot_untracked@cmd_snapshot_untracked",
+                            "plugin.guard.disapprove_plugin@cmd_disapprove_plugin",
+                            "plugin.guard.enforce@cmd_enforce",
+                            "plugin.guard.restore_plugin@cmd_restore_plugin",
+                            "plugin.guard.block@cmd_toggle_block",
+                            "plugin.guard.quarantine@cmd_quarantine_plugin",
+                            "plugin.guard.delete_quarantined@cmd_delete_quarantined_plugin"
+                        ],
+                        "scope": ["parent", "any"],
+                        "priority": {"default": 10}
+                    }]
+                }
+            },
           {
             "universal_id": "websocket-relay",
             "name": "matrix_websocket",
@@ -158,8 +196,40 @@ matrix_directive = {
 
             },
           },
+          {
+            "universal_id": "gatekeeper",
+            "name": "gatekeeper",
+            "config": {
+                "ui": {
+                    "agent_tree": {"emoji": "🚪"},
+                },
+                "log_path": "/var/log/auth.log",
+                "maxmind_db": "GeoLite2-City.mmdb",
+                "geoip_enabled": 1,
+                "always_alert": 1,
+                "alert_to_role": "hive.alert",  # They both send alerts, but report_to_role - a little more
+                #"report_to_role": "hive.forensics.data_feed"
+            },
+        },
+        {
+            "universal_id": "discord-delta-5",
+            "name": "discord_relay",
+            "tags": {
+                "connection": {
+                    "proto": "discord"
+                },
+            },
+            "config": {
+                "ui": {
+                    "agent_tree": {"emoji": "💬"},
+                },
+                "service-manager": [{
+                    "role": ["hive.alert@cmd_send_alert_msg"],
+                    "scope": ["parent", "any"],
 
-
+                }]
+            }
+        },
         {
             "universal_id": "forensic-detective-1",
             "name": "forensic_detective",
@@ -207,24 +277,6 @@ matrix_directive = {
                 "conn_threshold": 1000,  # Warn if active TCP/UDP conns > 1000
                 "top_n_procs": 5,  # Include top 5 process hogs in report
                 "report_to_role": "hive.forensics.data_feed",
-            }
-        },
-        {
-            "universal_id": "nginx-sentinel",
-            "name": "nginx_watchdog",
-            "enabled": False,
-            "config": {
-                "ui": {
-                    "agent_tree": {"emoji": "🎉"},
-                },
-                "check_interval_sec": 10,
-                "always_alert": 1,
-                "restart_limit": 3,
-                "service_name": "nginx",
-                "ports": [85],
-                "alert_cooldown": 300,
-                "alert_to_role": "hive.alert", #They both send alerts, but report_to_role - a little more
-                "report_to_role": "hive.forensics.data_feed"
             }
         },
 

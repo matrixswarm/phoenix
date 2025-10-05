@@ -155,6 +155,7 @@ matrix_directive = {
               "universal_id": "npc-simulator-1",
               "name": "npc_simulator",
               "app": "swarm-core",
+              "enabled": False,
               "tags": {
                 "packet_signing": {
                     "in": True,
@@ -417,7 +418,7 @@ matrix_directive = {
         {
             "universal_id": "redis-hammer",
             "name": "redis_watchdog",
-            "app": "redis-core",
+            "enabled": False,
             "config": {
                 "ui": {
                     "agent_tree": {"emoji": "🎭"},
@@ -457,6 +458,44 @@ matrix_directive = {
                     "auth": {"sig": True},
                     "priority": 10,
                     "exclusive": False
+                }]
+            }
+        },
+        {
+            "universal_id": "wordpress-plugin-guard-1",
+            "name": "wordpress_plugin_guard",
+            "tags": {
+                "packet_signing": {"in": True, "out": True}
+            },
+            "config": {
+                "ui": {
+                    "agent_tree": {"emoji": "🧼"},
+                    "panel": ["wordpress_plugin_guard.plugin_guard"]
+                },
+                "plugin_dir": "/var/www/html/wordpress/wp-content/plugins",
+                "quarantine_dir": "/opt/quarantine/wp_plugins",
+                "trusted_plugins_path": "/opt/swarm/guard/trusted_plugins.json",
+                "enforce": False,
+                "interval": 15,
+                "restart_php_after_quarantine": False,
+                "alert_to_role": "hive.alert",
+                #"report_to_role": "hive.forensics.data_feed",
+                "service-manager": [{
+                    "role": [
+                        "plugin.guard.snapshot@cmd_snapshot_plugins",
+                        "plugin.guard.status@cmd_list_alert_status",
+                        "plugin.guard.list_plugins@cmd_list_plugins",
+                        "plugin.guard.snapshot_plugin@cmd_snapshot_plugin",
+                        "plugin.guard.snapshot_untracked@cmd_snapshot_untracked",
+                        "plugin.guard.disapprove_plugin@cmd_disapprove_plugin",
+                        "plugin.guard.enforce@cmd_enforce",
+                        "plugin.guard.restore_plugin@cmd_restore_plugin",
+                        "plugin.guard.block@cmd_toggle_block",
+                        "plugin.guard.quarantine@cmd_quarantine_plugin",
+                        "plugin.guard.delete_quarantined@cmd_delete_quarantined_plugin"
+                    ],
+                    "scope": ["parent", "any"],
+                    "priority": {"default": 10}
                 }]
             }
         },
