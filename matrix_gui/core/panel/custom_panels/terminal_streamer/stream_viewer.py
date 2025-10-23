@@ -1,10 +1,14 @@
 # Authored by Daniel F MacDonald and ChatGPT-5 aka The Generals
 import uuid, time
-from PyQt5.QtWidgets import QWidget, QVBoxLayout, QLabel, QPushButton, QHBoxLayout, QLineEdit, QListWidget, QTextEdit
+from PyQt6.QtWidgets import QWidget ,QVBoxLayout, QLabel, QPushButton, QHBoxLayout, QLineEdit, QListWidget, QTextEdit
+from PyQt6.QtGui import QTextCursor
+from PyQt6.QtWidgets import QSplitter
 from matrix_gui.core.class_lib.packet_delivery.packet.standard.command.packet import Packet
 from matrix_gui.core.panel.control_bar import PanelButton
 from matrix_gui.core.emit_gui_exception_log import emit_gui_exception_log
 from matrix_gui.core.panel.custom_panels.interfaces.base_panel_interface import PhoenixPanelInterface
+from collections import deque
+from PyQt6.QtCore import QMetaObject, Qt, pyqtSlot
 
 class StreamViewer(PhoenixPanelInterface):
     cache_panel = True
@@ -15,71 +19,77 @@ class StreamViewer(PhoenixPanelInterface):
         self._connect_signals()
         self.favorites = self.deployment.get("terminal_favorites", [])
         self._refresh_fav_list()
-        self.auto_scroll = True
+        self.auto_refresh = True
+        self.scroll_btn.setChecked(True)
+        self.scroll_btn.setText("Auto-Refresh: ON")
+        self._pending_outputs = deque(maxlen=10)
 
     def _build_layout(self):
-
         try:
-
             layout = QVBoxLayout()
 
-            # Favorites list
+            # === Favorites ===
             self.fav_list = QListWidget()
             self.fav_list.itemDoubleClicked.connect(self._populate_from_favorite)
-            layout.addWidget(QLabel("⭐ Favorites"))
-            layout.addWidget(self.fav_list)
 
-            btn_row = QHBoxLayout()
             self.del_btn = QPushButton("Delete")
             self.edit_btn = QPushButton("Edit")
-
             self.del_btn.clicked.connect(self._delete_favorite)
             self.edit_btn.clicked.connect(self._edit_favorite)
 
-            btn_row.addWidget(self.del_btn)
-            btn_row.addWidget(self.edit_btn)
-            layout.addLayout(btn_row)
+            fav_btn_row = QHBoxLayout()
+            fav_btn_row.addWidget(self.del_btn)
+            fav_btn_row.addWidget(self.edit_btn)
 
-            # Terminal output
+            fav_container = QWidget()
+            fav_layout = QVBoxLayout(fav_container)
+            fav_layout.addWidget(QLabel("⭐ Favorites"))
+            fav_layout.addWidget(self.fav_list)
+            fav_layout.addLayout(fav_btn_row)
+
+            # === Terminal output ===
             self.output_box = QTextEdit()
             self.output_box.setReadOnly(True)
-            self.output_box.setStyleSheet("font-family: Consolas, monospace;")
-            layout.addWidget(self.output_box)
+            self.output_box.setObjectName("OutputBox")
 
+            # === Splitter (draggable divider) ===
+            splitter = QSplitter(Qt.Orientation.Vertical)
+            splitter.addWidget(fav_container)
+            splitter.addWidget(self.output_box)
+            splitter.setStretchFactor(1, 2)  # give more room to output box
+            layout.addWidget(splitter)
 
+            # === Command row ===
             cmd_row = QHBoxLayout()
             self.cmd_input = QLineEdit()
             self.refresh_input = QLineEdit()
             self.run_btn = QPushButton("Run")
             self.stop_btn = QPushButton("Stop")
             self.fav_btn = QPushButton("Add to Favorites")
+            self.allowed_btn = QPushButton("List Allowed")
+            self.scroll_btn = QPushButton("Auto-Scroll: ON")
+            self.clear_btn = QPushButton("Clear")
 
-            # Wire handlers
+            self.allowed_btn.clicked.connect(self._list_allowed)
             self.run_btn.clicked.connect(self._run_command)
             self.stop_btn.clicked.connect(self._stop_command)
             self.fav_btn.clicked.connect(self._add_to_favorites)
+            self.scroll_btn.setCheckable(True)
+            self.scroll_btn.setChecked(True)
+            self.scroll_btn.clicked.connect(self._toggle_auto_scroll)
+            self.clear_btn.clicked.connect(self._clear_output)
 
-            # add favorites list + output box here
+            cmd_row.addWidget(self.allowed_btn)
             cmd_row.addWidget(self.cmd_input)
             cmd_row.addWidget(self.refresh_input)
             cmd_row.addWidget(self.run_btn)
             cmd_row.addWidget(self.stop_btn)
             cmd_row.addWidget(self.fav_btn)
-
-            # auto scroll
-            self.scroll_btn = QPushButton("Auto-Scroll: ON")
-            self.scroll_btn.setCheckable(True)
-            self.scroll_btn.setChecked(True)
-            self.scroll_btn.clicked.connect(self._toggle_auto_scroll)
             cmd_row.addWidget(self.scroll_btn)
-
-            #clear button
-            self.clear_btn = QPushButton("Clear")
-            self.clear_btn.clicked.connect(self._clear_output)
             cmd_row.addWidget(self.clear_btn)
 
             layout.addLayout(cmd_row)
-
+            self._last_token = None
             return layout
         except Exception as e:
             emit_gui_exception_log("StreamViewer._build_layout", e)
@@ -125,7 +135,7 @@ class StreamViewer(PhoenixPanelInterface):
     def _stop_command(self):
 
         try:
-            token = str(uuid.uuid4())
+            token = self._last_token = str(uuid.uuid4())
             pk = Packet()
             pk.set_data({
                 "handler": "cmd_service_request",
@@ -210,17 +220,47 @@ class StreamViewer(PhoenixPanelInterface):
 
     def _handle_output(self, session_id, channel, source, payload, **_):
         try:
-            data = payload.get("content", {})
-            output = data.get("output", "")
-            self.output_box.append(output)
-            if self.auto_scroll:
-                self.output_box.moveCursor(self.output_box.textCursor().End)
+            if not payload:
+                return
+
+            data = payload.get("content") or {}
+            output = str(data.get("output") or "")
+            token = data.get("token") or ""
+
+            clear_needed = (
+                    getattr(self, "auto_refresh", False)
+                    and token
+                    and getattr(self, "_last_token", None) != token
+            )
+
+            # enqueue data
+            self._pending_outputs.append((output, clear_needed))
+            # ask GUI thread to flush
+            QMetaObject.invokeMethod(
+                self,
+                "_flush_pending_output",
+                Qt.ConnectionType.QueuedConnection,
+            )
+
         except Exception as e:
             emit_gui_exception_log("StreamViewer._handle_output", e)
 
+    @pyqtSlot()
+    def _flush_pending_output(self):
+        if not self._pending_outputs:
+            return
+        output, clear_needed = self._pending_outputs.pop()
+        self._pending_outputs.clear()
+
+        if clear_needed:
+            self.output_box.clear()
+        self.output_box.append(output)
+        if getattr(self, "auto_refresh", False):
+            self.output_box.moveCursor(QTextCursor.MoveOperation.End)
+
     def _toggle_auto_scroll(self):
-        self.auto_scroll = self.scroll_btn.isChecked()
-        self.scroll_btn.setText("Auto-Scroll: ON" if self.auto_scroll else "Auto-Scroll: OFF")
+        self.auto_refresh = self.scroll_btn.isChecked()
+        self.scroll_btn.setText("Auto-Refresh: ON" if self.auto_refresh else "Auto-Refresh: OFF")
 
     def _clear_output(self):
         try:
@@ -230,6 +270,36 @@ class StreamViewer(PhoenixPanelInterface):
 
     def get_panel_buttons(self):
         return [PanelButton("🖥️", "Terminal", lambda: self.session_window.show_specialty_panel(self))]
+
+    def _list_allowed(self):
+        try:
+            token = str(uuid.uuid4())
+            pk = Packet()
+            pk.set_data({
+                "handler": "cmd_service_request",
+                "ts": time.time(),
+                "content": {
+                    "service": "terminal.allowed.list",
+                    "payload": {
+                        "session_id": self.session_id,
+                        "token": token,
+                        "return_handler": "terminal_panel.update"
+                    }
+                }
+            })
+
+            # clear output and wait for reply
+            self.output_box.clear()
+            self.output_box.append("Fetching allowed commands...\n")
+
+            self.bus.emit(
+                "outbound.message",
+                session_id=self.session_id,
+                channel="outgoing.command",
+                packet=pk
+            )
+        except Exception as e:
+            emit_gui_exception_log("StreamViewer._list_allowed", e)
 
     def _delete_favorite(self):
         try:
@@ -244,6 +314,7 @@ class StreamViewer(PhoenixPanelInterface):
                 print("[DEBUG] Delete ignored, no valid row selected")
         except Exception as e:
             emit_gui_exception_log("StreamViewer._delete_favorite", e)
+
 
     def _edit_favorite(self):
         try:

@@ -1,11 +1,12 @@
-# Authored by Daniel F MacDonald and ChatGPT-5 aka The Generals
 import uuid, time, json
-from PyQt5.QtWidgets import (QVBoxLayout, QMessageBox, QHBoxLayout, QLabel, QPushButton, QTextBrowser)
+from PyQt6.QtWidgets import (QVBoxLayout, QMessageBox, QHBoxLayout, QLabel, QPushButton, QTextBrowser)
 from matrix_gui.core.class_lib.packet_delivery.packet.standard.command.packet import Packet
 from matrix_gui.core.panel.control_bar import PanelButton
 from matrix_gui.core.emit_gui_exception_log import emit_gui_exception_log
 from matrix_gui.core.panel.custom_panels.interfaces.base_panel_interface import PhoenixPanelInterface
-from PyQt5.QtCore import QMutex, Qt, QTimer, QUrl
+from PyQt6.QtCore import QMutex, Qt, QTimer, QUrl
+from PyQt6.QtGui import QTextCursor
+
 from collections import deque
 
 class PluginGuard(PhoenixPanelInterface):
@@ -46,7 +47,7 @@ class PluginGuard(PhoenixPanelInterface):
         self.auto_scroll = True
         self.output_box.setOpenExternalLinks(False)
         self.output_box.setTextInteractionFlags(
-            self.output_box.textInteractionFlags() | Qt.LinksAccessibleByMouse
+            self.output_box.textInteractionFlags() | Qt.TextInteractionFlag.LinksAccessibleByMouse
         )
         self.output_box.anchorClicked.connect(self._handle_anchor)
 
@@ -110,10 +111,10 @@ class PluginGuard(PhoenixPanelInterface):
             "Confirm Snapshot",
             "Are you sure you want to snapshot all tracked plugins?\n\n"
             "This will approve their current state as the trusted baseline.",
-            QMessageBox.Yes | QMessageBox.No,
-            QMessageBox.No
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No
         )
-        if reply != QMessageBox.Yes:
+        if reply != QMessageBox.StandardButton.Yes:
             self._append_output("[ACTION] ❌ Snapshot cancelled by user.")
             return
 
@@ -179,10 +180,10 @@ class PluginGuard(PhoenixPanelInterface):
                         "it's getting firebombed.\n\n"
                         "Are you absolutely sure you want to arm it?"
                     ),
-                    QMessageBox.Yes | QMessageBox.No,
-                    QMessageBox.No,
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                    QMessageBox.StandardButton.No,
                 )
-                if reply != QMessageBox.Yes:
+                if reply != QMessageBox.StandardButton.Yes:
                     # revert toggle visually
                     self.block_btn.setChecked(False)
                     self.block_btn.setStyleSheet("")
@@ -287,14 +288,14 @@ class PluginGuard(PhoenixPanelInterface):
     def _disconnect_signals(self):
         try:
             scoped = f"inbound.verified.plugin_guard.panel.update.{self.session_id}"
-            self.bus.off(scoped, self._handle_output)
+            self.bus.off(scoped, self._safe_handle_output)
         except Exception as e:
             emit_gui_exception_log("PluginGuard._disconnect_signals", e)
 
     def _append_output(self, text):
         self.output_box.append(text)
         if self.auto_scroll:
-            self.output_box.moveCursor(self.output_box.textCursor().End)
+            self.output_box.moveCursor(QTextCursor.MoveOperation.End)
 
     def get_panel_buttons(self):
         return [PanelButton("🧹", "Plugin Guard", lambda: self.session_window.show_specialty_panel(self))]
@@ -397,7 +398,7 @@ class PluginGuard(PhoenixPanelInterface):
             html += "</p><hr>"
             self.output_box.insertHtml(html)
             if self.auto_scroll:
-                self.output_box.moveCursor(self.output_box.textCursor().End)
+                self.output_box.moveCursor(QTextCursor.MoveOperation.End)
 
         except Exception as e:
             emit_gui_exception_log("PluginGuard._append_plugin_entry", e)
@@ -496,7 +497,8 @@ class PluginGuard(PhoenixPanelInterface):
             else:
                 self.output_box.insertHtml("<p>All trusted plugins are stable.</p><br />")
 
-            self.output_box.moveCursor(self.output_box.textCursor().End)
+            self.output_box.moveCursor(QTextCursor.MoveOperation.End)
+
 
             def _refresh_view():
                 self.output_box.viewport().update()

@@ -1,15 +1,15 @@
 # Authored by Daniel F MacDonald and ChatGPT aka The Generals
 import datetime
-from PyQt5.QtGui import QColor, QBrush
-from PyQt5.QtWidgets import (
+from PyQt6.QtGui import QColor, QBrush
+from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QLabel, QTextEdit, QPushButton, QTableWidget,
     QTableWidgetItem, QHeaderView, QGroupBox, QHBoxLayout, QSizePolicy
 )
-from PyQt5.QtGui import QBrush, QColor
-from PyQt5.QtCore import Qt, QSize, QTimer
+from PyQt6.QtGui import QBrush, QColor
+from PyQt6.QtCore import Qt, QSize, QTimer
 import json
 from matrix_gui.core.emit_gui_exception_log import emit_gui_exception_log
-from PyQt5.QtWidgets import QApplication
+from PyQt6.QtWidgets import QApplication
 class AgentDetailPanel(QWidget):
     def __init__(self, session_id, bus=None):
         super().__init__()
@@ -22,7 +22,7 @@ class AgentDetailPanel(QWidget):
 
             # === Agent Inspector ===
             self.inspector_group = QGroupBox("Agent Inspector")
-            self.inspector_group.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+            self.inspector_group.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
             inspector_layout = QVBoxLayout(self.inspector_group)
 
             #Agent Detail
@@ -35,8 +35,8 @@ class AgentDetailPanel(QWidget):
             self.thread_table = QTableWidget()
             self.thread_table.setColumnCount(3)
             self.thread_table.setHorizontalHeaderLabels(["Thread", "Status", "Delta"])
-            self.thread_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-            self.thread_table.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+            self.thread_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+            self.thread_table.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
             thread_title = QLabel("🧵 Threads & Processes")
             inspector_layout.addWidget(thread_title)
             inspector_layout.addWidget(self.thread_table)
@@ -49,15 +49,15 @@ class AgentDetailPanel(QWidget):
             self.spawn_table = QTableWidget()
             self.spawn_table.setColumnCount(2)
             self.spawn_table.setHorizontalHeaderLabels(["Timestamp", "Note"])
-            self.spawn_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-            self.spawn_table.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+            self.spawn_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+            self.spawn_table.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
             inspector_layout.addWidget(self.spawn_table)
 
             self._closing = False
 
             # === Config JSON ===
             self.config_group = QGroupBox("⚙️ Config")
-            self.config_group.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.MinimumExpanding)
+            self.config_group.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.MinimumExpanding)
             config_layout = QVBoxLayout(self.config_group)
 
             self.config_text = QTextEdit()
@@ -83,11 +83,11 @@ class AgentDetailPanel(QWidget):
             self.layout.setStretch(1, 1)  # tree
             self.layout.setStretch(2, 2)  # panel
 
-            self.inspector_group.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-            self.config_group.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+            self.inspector_group.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+            self.config_group.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
 
 
-            self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+            self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
             self.current_config = {}
 
             self.bus.on(f"inbound.verified.agent_tree_master.update.{self.bound_session_id}", self._handle_tree_update)
@@ -231,7 +231,7 @@ class AgentDetailPanel(QWidget):
                             self.thread_table.item(row, col).setForeground(QBrush(color))
             else:
                 item = QTableWidgetItem("—")
-                item.setTextAlignment(Qt.AlignCenter)
+                item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
                 item.setForeground(QBrush(QColor("#888")))
                 self.thread_table.setItem(0, 0, item)
 
@@ -276,7 +276,7 @@ class AgentDetailPanel(QWidget):
                     self.spawn_table.setItem(row, 1, QTableWidgetItem(note))
             else:
                 item = QTableWidgetItem("—")
-                item.setTextAlignment(Qt.AlignCenter)
+                item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
                 item.setForeground(QBrush(QColor("#888")))
                 self.spawn_table.setItem(0, 0, item)
 

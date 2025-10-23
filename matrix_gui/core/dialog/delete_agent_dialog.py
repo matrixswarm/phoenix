@@ -1,6 +1,6 @@
 # Authored by Daniel F MacDonald and ChatGPT 5 aka The Generals
 import time, uuid
-from PyQt5.QtWidgets import (
+from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QLineEdit, QMessageBox
 )
@@ -39,13 +39,6 @@ class DeleteAgentDialog(QDialog):
         row2.addWidget(btn_cancel)
         layout.addLayout(row2)
 
-        # Listen for confirmation
-        if self.bus:
-            self.bus.on(
-                f"inbound.verified.delete_agent.confirm.{self.session_id}",
-                self._handle_delete_confirm
-            )
-
     def deploy(self):
         self.agent_id = self.agent_edit.text().strip()
         if not self.agent_id:
@@ -71,38 +64,6 @@ class DeleteAgentDialog(QDialog):
         except Exception as e:
             emit_gui_exception_log("DeleteAgentDialog.deploy", e)
             QMessageBox.warning(self, "Error", f"Delete command failed: {e}")
-
-    def _handle_delete_confirm(self, session_id, channel, source, payload, ts):
-        try:
-            content = payload.get("content", {})
-            status = content.get("status", "n/a")
-            msg = content.get("message", "")
-            target = content.get("details", {}).get("target_universal_id", "?")
-            kill_list = content.get("details", {}).get("kill_list", [])
-            trace = content.get("response_id")
-
-            if self.conn:
-                event = {
-                    "event_type": "delete",
-                    "agent": target,
-                    "status": status,
-                    "kill_list": kill_list,
-                    "details": msg,
-                    "trace": trace,
-                    "session_id": self.session_id,
-                    "deployment": self.deployment.get("label", "unknown"),
-                    "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
-                    "level": "INFO"
-                }
-                self.conn.send({
-                    "type": "swarm_feed",
-                    "session_id": self.session_id,
-                    "event": event
-                })
-
-
-        except Exception as e:
-            emit_gui_exception_log("DeleteAgentDialog._handle_delete_confirm", e)
 
     def prefill_uid(self, uid: str):
         self.agent_edit.setText(uid)

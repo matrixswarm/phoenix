@@ -2,7 +2,7 @@
 # SourceControlPanel: replace an agent’s source and optionally restart it.
 
 import os, base64, hashlib, time, json, shutil
-from PyQt5.QtWidgets import (
+from PyQt6.QtWidgets import (
     QGroupBox, QVBoxLayout, QLabel, QComboBox,
     QPushButton, QFileDialog, QCheckBox, QMessageBox
 )

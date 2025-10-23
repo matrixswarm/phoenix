@@ -1,5 +1,5 @@
-from PyQt5.QtWidgets import QDialog, QVBoxLayout, QLabel, QTextEdit, QPushButton, QHBoxLayout, QApplication
-from PyQt5.QtGui import QFont
+from PyQt6.QtWidgets import QDialog, QVBoxLayout, QLabel, QTextEdit, QPushButton, QHBoxLayout, QApplication
+from PyQt6.QtGui import QFont
 
 class DeploymentDialog(QDialog):
     def __init__(self, command_text: str, parent=None):

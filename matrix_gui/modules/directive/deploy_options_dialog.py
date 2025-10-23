@@ -1,8 +1,7 @@
-from PyQt5.QtWidgets import (
-    QDialog, QVBoxLayout, QHBoxLayout, QDialogButtonBox, QCheckBox, QLabel,
-    QComboBox, QToolButton
+from PyQt6.QtWidgets import (
+    QDialog, QVBoxLayout, QDialogButtonBox, QCheckBox, QToolButton
 )
-from PyQt5.QtWidgets import QComboBox, QLineEdit
+from PyQt6.QtWidgets import QComboBox, QLineEdit
 class DeployOptionsDialog(QDialog):
     def __init__(self, parent=None, hosts=None, manage_conn_cb=None, refresh_hosts_cb=None):
         super().__init__(parent)
@@ -26,7 +25,7 @@ class DeployOptionsDialog(QDialog):
         manage_btn.setToolTip("Open Manage Connections")
         manage_btn.clicked.connect(self._manage_and_refresh)
 
-        self.buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        self.buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
 
         layout = QVBoxLayout(self)
         #layout.addWidget(self.clown_car_cb)

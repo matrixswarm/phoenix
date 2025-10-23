@@ -1,7 +1,7 @@
-from PyQt5.QtWidgets import QPlainTextEdit
-from PyQt5.QtGui import QFont, QTextCursor
-from PyQt5.QtCore import QTimer, pyqtSignal
-from PyQt5.QtGui import QTextCharFormat, QColor
+from PyQt6.QtWidgets import QPlainTextEdit
+from PyQt6.QtGui import QFont, QTextCursor
+from PyQt6.QtCore import QTimer, pyqtSignal
+from PyQt6.QtGui import QTextCharFormat, QColor
 from matrix_gui.core.emit_gui_exception_log import emit_gui_exception_log
 
 CHUNK_SIZE = 200
@@ -16,7 +16,7 @@ class LogPanel(QPlainTextEdit):
             self.bus = bus
             self.setReadOnly(True)
             self.setFont(QFont("Courier New", 9))           # monospace
-            self.setLineWrapMode(QPlainTextEdit.NoWrap)     # no wrapping
+            self.setLineWrapMode(QPlainTextEdit.LineWrapMode.NoWrap)     # no wrapping
 
             self._line_count = 0
             self._pending_lines = []
@@ -47,7 +47,7 @@ class LogPanel(QPlainTextEdit):
             fmt.setForeground(QColor("gray"))
 
         cursor = self.textCursor()
-        cursor.movePosition(QTextCursor.End)
+        cursor.movePosition(QTextCursor.MoveOperation.End)
         cursor.insertText(line + "\n", fmt)
 
     def _flush_lines(self):
@@ -63,7 +63,7 @@ class LogPanel(QPlainTextEdit):
         self._line_count += len(chunk)
         self.line_count_changed.emit(self._line_count)
 
-        self.moveCursor(QTextCursor.End)
+        self.moveCursor(QTextCursor.MoveOperation.End)
         self.ensureCursorVisible()
 
         if self._pending_lines:

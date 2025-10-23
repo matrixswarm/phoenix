@@ -1,5 +1,5 @@
-from PyQt5.QtWidgets import QDialog, QVBoxLayout, QLabel, QLineEdit, QPushButton, QMessageBox
 import os
+from PyQt6.QtWidgets import QDialog, QVBoxLayout, QLabel, QLineEdit, QPushButton, QMessageBox
 from matrix_gui.modules.vault.crypto.vault_handler import load_vault_singlefile, save_vault_singlefile
 
 class VaultPasswordChangeDialog(QDialog):
@@ -18,17 +18,17 @@ class VaultPasswordChangeDialog(QDialog):
 
         self.old_pw = QLineEdit()
         self.old_pw.setPlaceholderText("Current Password")
-        self.old_pw.setEchoMode(QLineEdit.Password)
+        self.old_pw.setEchoMode(QLineEdit.EchoMode.Password)
         layout.addWidget(self.old_pw)
 
         self.new_pw = QLineEdit()
         self.new_pw.setPlaceholderText("New Password")
-        self.new_pw.setEchoMode(QLineEdit.Password)
+        self.new_pw.setEchoMode(QLineEdit.EchoMode.Password)
         layout.addWidget(self.new_pw)
 
         self.confirm_pw = QLineEdit()
         self.confirm_pw.setPlaceholderText("Confirm New Password")
-        self.confirm_pw.setEchoMode(QLineEdit.Password)
+        self.confirm_pw.setEchoMode(QLineEdit.EchoMode.Password)
         layout.addWidget(self.confirm_pw)
 
         self.change_btn = QPushButton("🔑 Change Password")

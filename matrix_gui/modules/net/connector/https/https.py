@@ -1,9 +1,4 @@
-import ssl
-import socket
-import uuid
-import http.client
-import json
-import time
+import os, ssl,socket, uuid, http.client,json, time
 from Crypto.PublicKey import RSA
 from matrix_gui.core.utils.spki_utils import verify_spki_pin
 from matrix_gui.core.utils.crypto_utils import sign_data
@@ -59,8 +54,10 @@ class HTTPSConnector(BaseConnector):
         print(f"[HTTPSConnector][{uid}] 🎯 Attempting send → {self.host}:{self.port}")
         try:
 
+            inner={}
             self._set_status("connecting")
-            inner = packet.get_packet()
+            content = packet.get_packet()
+            inner['matrix_packet']=content
             inner["ts"] = int(time.time())
             inner["session_id"] = self.session_id
 
@@ -70,11 +67,9 @@ class HTTPSConnector(BaseConnector):
             signing = dep.get("certs", {}).get(uid, {}).get("signing", {})
             priv_pem = signing.get("remote_privkey")
 
-            sig_b64 = None
-            if priv_pem:
-
-                priv_key = RSA.import_key(priv_pem.encode())
-                sig_b64 = sign_data(inner, priv_key)
+            # mandatory
+            priv_key = RSA.import_key(priv_pem.encode())
+            sig_b64 = sign_data(inner, priv_key)
 
             outer = {"sig": sig_b64, "content": inner}
             body = json.dumps(outer, separators=(",", ":")).encode()
@@ -96,7 +91,7 @@ class HTTPSConnector(BaseConnector):
             ctx_ssl = ssl.create_default_context(ssl.Purpose.SERVER_AUTH)
             ctx_ssl.check_hostname = False
             ctx_ssl.verify_mode = ssl.CERT_NONE
-            load_cert_chain_from_memory(ctx_ssl, cert_pem, key_pem)
+            pin, cert_path, key_path = load_cert_chain_from_memory(ctx_ssl, cert_pem, key_pem)
             if ca_pem:
                 ctx_ssl.load_verify_locations(cadata=ca_pem)
 
@@ -126,6 +121,12 @@ class HTTPSConnector(BaseConnector):
             https_conn.close()
             tls_sock.close()
             raw_sock.close()
+            try:
+                os.remove(cert_path)
+                os.remove(key_path)
+                print(f"[CERT_LOADER] 🧹 Cleaned up {cert_path}, {key_path}")
+            except Exception as e:
+                print(f"[CERT_LOADER][WARN] Failed cleanup: {e}")
             self._set_status("connected")
 
         except Exception as e:

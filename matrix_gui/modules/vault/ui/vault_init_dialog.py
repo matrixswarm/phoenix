@@ -1,7 +1,7 @@
-from PyQt5.QtWidgets import QDialog, QVBoxLayout, QLabel, QPushButton, QLineEdit, QMessageBox
-from datetime import datetime
+from PyQt6.QtWidgets import QVBoxLayout, QLabel, QPushButton, QLineEdit, QMessageBox, QDialog
 from matrix_gui.modules.vault.crypto.vault_handler import save_vault_singlefile
 from matrix_gui.util.resolve_matrixswarm_base import resolve_matrixswarm_base
+from matrix_gui.modules.vault.ui.vault_popup import VaultPasswordDialog
 
 class VaultInitDialog(QDialog):
     def __init__(self, parent=None):
@@ -17,7 +17,7 @@ class VaultInitDialog(QDialog):
 
         self.password_input = QLineEdit()
         self.password_input.setPlaceholderText("Vault Password")
-        self.password_input.setEchoMode(QLineEdit.Password)
+        self.password_input.setEchoMode(QLineEdit.EchoMode.Password)
 
         self.create_button = QPushButton("🛠 Create Vault")
         self.create_button.clicked.connect(self.create_vault)
@@ -42,7 +42,7 @@ class VaultInitDialog(QDialog):
         vault_dir.mkdir(parents=True, exist_ok=True)
 
         # ⬇ Replace hardcoded name with interactive save dialog
-        from PyQt5.QtWidgets import QFileDialog
+        from PyQt6.QtWidgets import QFileDialog
         path, _ = QFileDialog.getSaveFileName(self, "Save New Vault As", str(vault_dir), "Vault Files (*.json)")
         if not path:
             return  # cancelled
@@ -70,10 +70,26 @@ class VaultInitDialog(QDialog):
         self.accept()
 
     def unlock_vault_flow(self):
-        from matrix_gui.modules.vault.ui.vault_popup import VaultPasswordDialog
         dialog = VaultPasswordDialog(self)
-        result = dialog.exec_()
-        if result != dialog.Accepted:
+        result = dialog.exec()
+
+        # User canceled or dialog closed unexpectedly
+        if result != QDialog.DialogCode.Accepted:
             return None, None, None
 
-        return dialog.vault_file_path, dialog.vault_key_path, dialog.vault_password
+        # Defensive getters to avoid missing attributes
+        vault_file = getattr(dialog, "vault_file_path", None)
+        vault_key = getattr(dialog, "vault_key_path", None)
+        vault_pass = getattr(dialog, "vault_password", None)
+
+        # Validation guard
+        if not vault_file:
+            QMessageBox.warning(
+                self,
+                "No Vault Selected",
+                "Please select a vault file before entering a password."
+            )
+            return None, None, None
+
+        return vault_file, vault_key, vault_pass
+

@@ -1,12 +1,11 @@
-from PyQt5.QtWidgets import QDialog, QVBoxLayout, QLabel, QPushButton, QLineEdit, QMessageBox, QFileDialog
 import os
+from PyQt6.QtWidgets import QDialog, QVBoxLayout, QLabel, QPushButton, QLineEdit, QMessageBox, QFileDialog
 from matrix_gui.util.resolve_matrixswarm_base import resolve_matrixswarm_base
 from matrix_gui.core.event_bus import EventBus
-from matrix_gui.modules.vault.crypto.vault_handler import load_vault_singlefile
 from matrix_gui.modules.vault.services.vault_singleton import VaultSingleton
 from matrix_gui.modules.vault.services.vault_obj import VaultObj
-from matrix_gui.modules.vault.ui.vault_init_dialog import VaultInitDialog
 from matrix_gui.modules.vault.ui.vault_password_change_dialog import VaultPasswordChangeDialog
+from matrix_gui.modules.vault.crypto.vault_handler import load_vault_singlefile
 
 class VaultPasswordDialog(QDialog):
     def __init__(self, parent=None):
@@ -29,7 +28,7 @@ class VaultPasswordDialog(QDialog):
 
         self.password_input = QLineEdit()
         self.password_input.setPlaceholderText("Vault Password")
-        self.password_input.setEchoMode(QLineEdit.Password)
+        self.password_input.setEchoMode(QLineEdit.EchoMode.Password)
         self.password_input.returnPressed.connect(self.auto_trigger_unlock)
 
         self.unlock_button = QPushButton("🔓 Unlock Vault")
@@ -75,11 +74,9 @@ class VaultPasswordDialog(QDialog):
             self.unlock_button.setFocus()
 
     def unlock_vault(self):
-
-
+        # Guard against double trigger
         if self._unlock_fired:
             print("[VAULT/UI] duplicate unlock ignored")
-            self._unlock_fired = True
             return
 
         password = self.password_input.text().strip()
@@ -87,13 +84,16 @@ class VaultPasswordDialog(QDialog):
             QMessageBox.warning(self, "Missing Password", "Please enter the vault password.")
             return
 
+        if not self.vault_file_path:
+            QMessageBox.warning(self, "No Vault Selected", "Please select a vault file first.")
+            return
+
         if not os.path.exists(self.vault_file_path):
             QMessageBox.critical(self, "Vault Error", "Vault file does not exist.")
             return
 
-
         try:
-            vault_data = load_vault_singlefile (password, self.vault_file_path)
+            vault_data = load_vault_singlefile(password, self.vault_file_path)
             self.vault_password = password
 
             vault_obj = VaultObj(
@@ -103,18 +103,19 @@ class VaultPasswordDialog(QDialog):
             )
             VaultSingleton.set(vault_obj)
 
-
         except Exception as e:
             QMessageBox.critical(self, "Vault Load Failed", f"Vault could not be decrypted:\n{e}")
             return
 
-        EventBus.emit("vault.unlocked",
-                      vault_path=self.vault_file_path,
-                      password=self.vault_password,
-                      vault_data=vault_data)
+        EventBus.emit(
+            "vault.unlocked",
+            vault_path=self.vault_file_path,
+            password=self.vault_password,
+            vault_data=vault_data
+        )
 
-        self.accept()
         self._unlock_fired = True
+        self.accept()
 
     def auto_trigger_unlock(self):
         if not self.vault_file_path:
@@ -128,14 +129,15 @@ class VaultPasswordDialog(QDialog):
         self.unlock_vault()
 
     def create_vault(self):
+        from matrix_gui.modules.vault.ui.vault_init_dialog import VaultInitDialog
 
         dlg = VaultInitDialog(self)
-        if dlg.exec_() == dlg.Accepted:
+        if dlg.exec() == QDialog.DialogCode.Accepted:
             self.vault_file_path = dlg.vault_path
             self.vault_password = dlg.vault_password
             # If you want: automatically unlock the new vault after creation
             try:
-                from matrix_gui.modules.vault.crypto.vault_handler import load_vault_singlefile
+
                 vault_data = load_vault_singlefile(self.vault_password, self.vault_file_path)
 
                 from matrix_gui.modules.vault.services.vault_obj import VaultObj
@@ -162,7 +164,7 @@ class VaultPasswordDialog(QDialog):
             QMessageBox.warning(self, "No Vault", "Please select a vault first.")
             return
         dlg = VaultPasswordChangeDialog(self.vault_file_path, self)
-        if dlg.exec_() == dlg.Accepted:
+        if dlg.exec() == QDialog.DialogCode.Accepted:
             # After success, set new password for next unlock
             self.vault_password = dlg.new_password
             QMessageBox.information(self, "Next Step", "Vault password has been updated. Please unlock with the new password.")

@@ -2,18 +2,18 @@
 ######## THIS IS A TEMPLATE, IT'S NOT MEANT TO BE USED DIRECTLY. YOU LOAD THIS TEMPLATE INTO PHOENIX GUI (DIRECTIVE SECTION), AND USE IT AS A SUBSTRATE TO ASSEMBLE CRYPTOGRAPHIC PACKAGED DEPLOYMENTS.
 ########
 matrix_directive = {
-        "universal_id": "matrix",
-        "name": "matrix",
-        "tags": {
-          "packet_signing": {
+    "universal_id": "matrix",
+    "name": "matrix",
+    "tags": {
+        "packet_signing": {
             "in": True,
             "out": True
-          }
-        },
-        "ui":{
-            "agent_tree": {"emoji": "🧬"},
-        },
-        "children": [# MATRIX PROTECTION LAYER 4 SENTINELS
+        }
+    },
+    "ui": {
+        "agent_tree": {"emoji": "🧬"},
+    },
+    "children": [  # MATRIX PROTECTION LAYER 4 SENTINELS
         # 4th SENTINEL WATCHES MATRIX, REST WATCH SENTINEL IN FRONT
         # ONLY WAY TO KILL MATRIX WOULD BE TO KILL THEM ALL, MATRIX INCLUSIVE, TAKING ANY COMBO OF 4 OUT DOES NOTHING
         {
@@ -23,7 +23,7 @@ matrix_directive = {
             "filesystem": {},
             "config": {
                 "matrix_secure_verified": 1,
-                "ui":{
+                "ui": {
                     "agent_tree": {"emoji": "🛡️"},
                 },
             },
@@ -35,7 +35,7 @@ matrix_directive = {
                     "filesystem": {},
                     "config": {
                         "matrix_secure_verified": 1,
-                        "ui":{
+                        "ui": {
                             "agent_tree": {"emoji": "🛡️"},
                         },
                     },
@@ -47,7 +47,7 @@ matrix_directive = {
                             "filesystem": {},
                             "config": {
                                 "matrix_secure_verified": 1,
-                                "ui":{
+                                "ui": {
                                     "agent_tree": {"emoji": "🛡️"},
                                 },
                             },
@@ -61,7 +61,7 @@ matrix_directive = {
                                         "matrix_secure_verified": 1,
                                         "watching": "the Queen",
                                         "universal_id_under_watch": "matrix",
-                                        "ui":{
+                                        "ui": {
                                             "agent_tree": {"emoji": "🛡️"},
                                         },
                                     }
@@ -72,29 +72,34 @@ matrix_directive = {
                 }
             ]
         },
-          {
+        {
             "universal_id": "matrix-https",
             "name": "matrix_https",
             "tags": {
-              "packet_signing": {
-                "in": True,
-                "out": True
-              },
-              "connection": {
-                "proto": "https"
-              },
-              "connection_cert": {
-                "proto": "https"
-              },
+                "packet_signing": {
+                    "in": True,
+                    "out": True
+                },
+                "connection": {
+                    "proto": "https"
+                },
+                "connection_cert": {
+                    "proto": "https"
+                },
             },
             "config": {
-              "service-manager": [],
-              "ui":{
-                "agent_tree": {"emoji": "🌐"},
-              },
+                "service-manager": [],
+                "role": ["hive.2fa@cmd_2fa_transport"],
+                "ui": {
+                    "agent_tree": {"emoji": "🌐"},
+                    "panel": [
+                        "matrix_https.config"
+                    ],
+                },
+
             }
-          },
-          {
+        },
+        {
             "universal_id": "slack-it-out-1",
             "name": "slack_relay",
             "enabled": False,
@@ -113,8 +118,8 @@ matrix_directive = {
                     "scope": ["parent", "any"],
                 }]
             }
-          },
-          {
+        },
+        {
             "universal_id": "websocket-relay",
             "name": "matrix_websocket",
             "tags": {
@@ -149,24 +154,25 @@ matrix_directive = {
                             "default": 10
                         }
                     }]
-                },
             },
-            {
-              "universal_id": "npc-simulator-1",
-              "name": "npc_simulator",
-              "app": "swarm-core",
-              "enabled": False,
-              "tags": {
+        },
+
+        {
+            "universal_id": "npc-simulator-1",
+            "name": "npc_simulator",
+            "app": "swarm-core",
+            "enabled": True,
+            "tags": {
                 "packet_signing": {
                     "in": True,
                     "out": True
                 }
-              },
-              "config": {
+            },
+            "config": {
                 "grid_size": 20,
                 "npc_count": 100,
                 "tick_interval_sec": 1,
-                "ui":{
+                "ui": {
                     "agent_tree": {"emoji": "🎮", "icon": ":path_to_icon"},
                     "panel": [
                         "npc_simulator.gameboard",
@@ -174,63 +180,63 @@ matrix_directive = {
                     ],
                 },
                 "service-manager": [{
-                      "role": [
+                    "role": [
                         "npc.swarm.control@cmd_control_npcs",
                         "npc.swarm.status@cmd_report_status",
                         "npc.swarm.stream.start@cmd_start_npc_stream",
                         "npc.swarm.stream.stop@cmd_stop_npc_stream"
-                      ],
-                      "scope": ["parent", "any"],
-                      "priority": {
+                    ],
+                    "scope": ["parent", "any"],
+                    "priority": {
                         "npc.swarm.control": 1,
                         "npc.swarm.status": 1,
                         "npc.swarm.stream.start": 1,
                         "npc.swarm.stream.stop": 1,
                         "default": 10
-                      },
-                      "exclusive": False
-                    }]
-              }
-            },
-            {
+                    },
+                    "exclusive": False
+                }]
+            }
+        },
+        {
             "universal_id": "apache_watchdog-1",
             "name": "apache_watchdog",
-                "config": {
-                    "ui": {
-                        "agent_tree": {"emoji": "🧭️"},
-                    },
-                    "check_interval_sec": 10,
-                    "service_name": "httpd",  # change to "httpd" for RHEL/CentOS
-                    "ports": [80, 443],
-                    "restart_limit": 3,
-                    "always_alert": 1,
-                    "alert_cooldown": 300,
-                    "alert_to_role": "hive.alert",
-                    "report_to_role": "hive.forensics.data_feed",
+            "config": {
+                "ui": {
+                    "agent_tree": {"emoji": "🧭️"},
                 },
+                "check_interval_sec": 10,
+                "service_name": "httpd",  # change to "httpd" for RHEL/CentOS
+                "ports": [80, 443],
+                "restart_limit": 3,
+                "always_alert": 1,
+                "alert_cooldown": 300,
+                "alert_to_role": "hive.alert",
+                "report_to_role": "hive.forensics.data_feed",
             },
-            {
-                "universal_id": "mysql-red-phone",
-                "name": "mysql_watchdog",
-                "config": {
-                    "ui": {
-                        "agent_tree": {"emoji": "🛢️"},
-                    },
-                    "mysql_port": 3306,
-                    "socket_path": "/var/run/mysqld/mysqld.sock",
-                    "service_name": "mariadb",
-                    "check_interval_sec": 20,
-                    "restart_limit": 3,
-                    "alert_thresholds": {
-                        "uptime_pct_min": 90,
-                        "slow_restart_sec": 10
-                    },
-                    "alert_to_role": "hive.alert",
-                    "report_to_role": "hive.forensics.data_feed",
-                }
+        },
+        {
+            "universal_id": "mysql-red-phone",
+            "name": "mysql_watchdog",
+            "config": {
+                "ui": {
+                    "agent_tree": {"emoji": "🛢️"},
+                },
+                "mysql_port": 3306,
+                "socket_path": "/var/run/mysqld/mysqld.sock",
+                "service_name": "mariadb",
+                "check_interval_sec": 20,
+                "restart_limit": 3,
+                "alert_thresholds": {
+                    "uptime_pct_min": 90,
+                    "slow_restart_sec": 10
+                },
+                "alert_to_role": "hive.alert",
+                "report_to_role": "hive.forensics.data_feed",
+            }
 
-            },
-            {
+        },
+        {
             "universal_id": "log_sentinel",
             "name": "log_sentinel",
             "tags": {
@@ -254,38 +260,42 @@ matrix_directive = {
                 }],
 
             },
-          },
-            {
-                "universal_id": "terminal-1",
-                "name": "terminal_streamer",
-                "tags": {
-                    "packet_signing": {
-                        "in": True,
-                        "out": True
-                    }
-                },
-                "config": {
-                    "ui": {
-                        "agent_tree": {"emoji": "🐚"},
-                        "panel": ["terminal_streamer.stream_viewer"]
-                    },
-                    "safe_shell_mode": True,
-                    "whitelist": ["uptime", "df -h", "free -m", "whoami"],
-                    "service-manager": [
-                        {
-                            "role": ["terminal.stream.start@cmd_start_stream_terminal", "terminal.stream.stop@cmd_stop_stream_terminal"],
-                            "scope": ["parent", "any"],
-                            "priority": {
-                                "hive.proxy.route": 5,
-                                "default": 10
-                            }
-                        }
-                    ]
+        },
+        {
+            "universal_id": "terminal-1",
+            "name": "terminal_streamer",
+            "tags": {
+                "packet_signing": {
+                    "in": True,
+                    "out": True
                 }
             },
-          {
+            "config": {
+                "ui": {
+                    "agent_tree": {"emoji": "🐚"},
+                    "panel": ["terminal_streamer.stream_viewer"]
+                },
+                "safe_shell_mode": True,
+                "whitelist": ["uptime", "df -h", "free -m", "whoami", "top -b -n 1 -c",
+                              "ps -eo pid,user,%cpu,%mem,etime,cmd --sort=-%cpu"],
+                "service-manager": [
+                    {
+                        "role": ["terminal.stream.start@cmd_start_stream_terminal",
+                                 "terminal.stream.stop@cmd_stop_stream_terminal",
+                                 "terminal.allowed.list@cmd_get_allowed_commands"],
+                        "scope": ["parent", "any"],
+                        "priority": {
+                            "hive.proxy.route": 5,
+                            "default": 10
+                        }
+                    }
+                ]
+            }
+        },
+        {
             "universal_id": "invisible-man",
             "name": "ghost_wire",
+            "enabled": False,
             "config": {
                 "ui": {
                     "agent_tree": {"emoji": "👻️"},
@@ -324,7 +334,7 @@ matrix_directive = {
                 "geoip_enabled": 1,
                 "always_alert": 1,
                 "alert_to_role": "hive.alert",  # They both send alerts, but report_to_role - a little more
-                #"report_to_role": "hive.forensics.data_feed"
+                # "report_to_role": "hive.forensics.data_feed"
             }
             ,
             "children": []
@@ -340,6 +350,9 @@ matrix_directive = {
             "config": {
                 "ui": {
                     "agent_tree": {"emoji": "💬"},
+                    "panel": [
+                        "discord_relay.security_2fa",
+                    ],
                 },
                 "service-manager": [{
                     "role": ["hive.alert@cmd_send_alert_msg"],
@@ -411,7 +424,7 @@ matrix_directive = {
                 "service_name": "nginx",
                 "ports": [85],
                 "alert_cooldown": 300,
-                "alert_to_role": "hive.alert", #They both send alerts, but report_to_role - a little more
+                "alert_to_role": "hive.alert",  # They both send alerts, but report_to_role - a little more
                 "report_to_role": "hive.forensics.data_feed"
             }
         },
@@ -464,6 +477,7 @@ matrix_directive = {
         {
             "universal_id": "wordpress-plugin-guard-1",
             "name": "wordpress_plugin_guard",
+            "enabled": False,
             "tags": {
                 "packet_signing": {"in": True, "out": True}
             },
@@ -479,7 +493,7 @@ matrix_directive = {
                 "interval": 15,
                 "restart_php_after_quarantine": False,
                 "alert_to_role": "hive.alert",
-                #"report_to_role": "hive.forensics.data_feed",
+                # "report_to_role": "hive.forensics.data_feed",
                 "service-manager": [{
                     "role": [
                         "plugin.guard.snapshot@cmd_snapshot_plugins",
@@ -503,17 +517,17 @@ matrix_directive = {
             "universal_id": "golden-child-4",
             "name": "oracle",
             "tags": {
-              "connection": { "proto": "openai" }
+                "connection": {"proto": "openai"}
             },
             "config": {
                 "ui": {
                     "agent_tree": {"emoji": "🔮"},
                 },
                 "service-manager": [{
-                    "role": ["hive.oracle@cmd_msg_prompt"],
+                    "role": ["hive.oracle@cmd_msg_prompt", "external.gateway.config@cmd_external_gateway_config"],
                 }]
             }
 
         },
-        ]
-      }
+    ]
+}

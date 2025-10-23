@@ -1,13 +1,14 @@
 import uuid
-import matrix_gui.resources.resources_rc
-from PyQt5.QtWidgets import QWidget, QHBoxLayout, QLabel, QPushButton, QMessageBox
-from PyQt5 import QtCore
-from PyQt5.QtGui import QIcon, QPixmap
-from PyQt5.QtWidgets import QComboBox
+from PyQt6.QtWidgets import QWidget, QHBoxLayout, QLabel, QPushButton, QMessageBox
+from PyQt6 import QtCore
+from PyQt6.QtGui import QIcon, QPixmap
+from PyQt6.QtWidgets import QComboBox
 from matrix_gui.core.event_bus import EventBus
 from matrix_gui.modules.directive.directive_manager_dialog import DirectiveManagerDialog
 from matrix_gui.modules.net.connection_manager_dialog import ConnectionManagerDialog
 from matrix_gui.core.emit_gui_exception_log import emit_gui_exception_log
+from PyQt6.QtWidgets import QFileDialog
+
 
 class PhoenixControlPanel(QWidget):
     """
@@ -39,6 +40,7 @@ class PhoenixControlPanel(QWidget):
         self.deployment_selector = QComboBox()
         self.layout.addWidget(self.deployment_selector)
 
+
         # Buttons with icons + colors
         self.connect_btn = QPushButton(" Connect")
         self.connect_btn.setObjectName("connect")
@@ -67,6 +69,12 @@ class PhoenixControlPanel(QWidget):
         self.change_vault_btn.setIconSize(QtCore.QSize(20, 20))
         self.change_vault_btn.clicked.connect(self.reopen_vault)
         self.layout.addWidget(self.change_vault_btn)
+
+        # --- tighten vertical footprint ---
+        self.setContentsMargins(0, 0, 0, 0)
+        self.layout.setContentsMargins(0, 0, 0, 0)
+        self.layout.setSpacing(4)
+        self.setFixedHeight(42)
 
         #self.layout.addWidget(self.vault_status)
         self.layout.addStretch()
@@ -126,13 +134,13 @@ class PhoenixControlPanel(QWidget):
 
     def launch_connection_manager(self):
         dlg = ConnectionManagerDialog(self.vault_data, self)
-        dlg.exec_()
+        dlg.exec()
         #self.refresh_deployments()
         self.vault_updated.emit(self.vault_data)
 
 
     def save_vault(self):
-        from PyQt5.QtWidgets import QFileDialog
+
         path, _ = QFileDialog.getSaveFileName(self, "Save Vault", filter="Vault JSON (*.json)")
         if path:
             import json
@@ -142,16 +150,15 @@ class PhoenixControlPanel(QWidget):
 
     def reopen_vault(self):
         reply = QMessageBox.question(
-            self,
-            "Close current vault?",
+            self, "Close current vault?",
             "Are you sure you want to close this vault?",
-            QMessageBox.Yes | QMessageBox.No,
-            QMessageBox.No,
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
         )
-        if reply != QMessageBox.Yes:
-            return  # No → do nothing
+        if reply != QMessageBox.StandardButton.Yes:
+            return
 
-        # Yes → let the cockpit perform the lifecycle
+        EventBus.emit("vault.closed")
         EventBus.emit("vault.reopen.requested")
 
     # =========================================================
@@ -178,7 +185,7 @@ class PhoenixControlPanel(QWidget):
             vault_path=self.vault_path,
             parent=self
         )
-        dlg.exec_()
+        dlg.exec()
 
     def emit_save(self):
         self.request_vault_save.emit(self.vault_data)

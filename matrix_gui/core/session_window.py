@@ -1,20 +1,23 @@
-# Authored by Daniel F MacDonald and ChatGPT aka The Generals
+# Authored by Daniel F MacDonald and ChatGPT-5 aka The Generals
 import sys
 import time
 import datetime
 import copy
-from PyQt5.QtWidgets import QMainWindow
-from PyQt5.QtWidgets import QStackedWidget
-from PyQt5.QtGui import QIcon
-from PyQt5.QtCore import Qt, QSize
-from PyQt5.QtWidgets import (
+from PyQt6.QtWidgets import QMainWindow
+from PyQt6.QtWidgets import QStackedWidget
+from PyQt6.QtGui import QIcon
+from PyQt6.QtCore import Qt, QSize, QTimer
+from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QToolBar,
     QGroupBox, QLabel, QApplication
 )
+
+from matrix_gui.core.dialog.restart_agent_dialog import RestartAgentDialog
 from matrix_gui.core.panel.control_bar import PanelButton
 from matrix_gui.core.panel.agent_detail.agent_detail_panel import AgentDetailPanel
 from matrix_gui.core.panel.crypto_alert.crypto_alert import CryptoAlertPanel
-
+from matrix_gui.core.panel.delete_agent_panel import DeleteAgentPanel
+from matrix_gui.theme.utils.hive_ui import StatusLabel
 from matrix_gui.core.emit_gui_exception_log import emit_gui_exception_log
 from matrix_gui.core.panel.log_panel.log_panel import LogPanel
 from matrix_gui.core.panel.agent_tree.agent_tree import PhoenixAgentTree
@@ -22,13 +25,43 @@ from matrix_gui.modules.net.deployment_connector import _connect_single
 from matrix_gui.core.dispatcher.inbound_dispatcher import InboundDispatcher
 from matrix_gui.core.dispatcher.outbound_dispatcher import OutboundDispatcher
 from matrix_gui.config.boot.globals import get_sessions
-from matrix_gui.core.dialog.replace_agent_dialog import ReplaceAgentDialog
-from matrix_gui.core.dialog.restart_agent_dialog import RestartAgentDialog
+from matrix_gui.core.panel.restart_agent_panel import RestartAgentPanel
+from matrix_gui.core.panel.replace_agent_panel import ReplaceAgentPanel
 from matrix_gui.core.dialog.delete_agent_dialog import DeleteAgentDialog
+from matrix_gui.core.panel.hotswap_agent_panel import HotswapAgentPanel
+from matrix_gui.core.panel.inject_agent_panel import InjectAgentPanel
 from matrix_gui.core.panel.control_bar import ControlBar
 
 
 def run_session(session_id, conn):
+
+    app = QApplication.instance() or QApplication(sys.argv)
+
+    # --- Dynamically locate and load the global Hive theme ---
+    try:
+        from pathlib import Path
+        import inspect
+
+        # Find the directory where this file (session_window.py) lives
+        current_file = Path(inspect.getfile(inspect.currentframe())).resolve()
+
+        # Walk upward until we hit the "matrix_gui" folder, then add /theme/hive_theme.qss
+        for parent in current_file.parents:
+            if parent.name == "matrix_gui":
+                theme_path = parent / "theme" / "hive_theme.qss"
+                break
+        else:
+            theme_path = Path.cwd() / "matrix_gui" / "theme" / "hive_theme.qss"
+
+        if theme_path.exists():
+            with open(theme_path, "r", encoding="utf-8") as f:
+                app.setStyleSheet(f.read())
+            print(f"[SESSION][INFO] Loaded theme dynamically from {theme_path}")
+        else:
+            print(f"[SESSION][WARN] Theme file not found at {theme_path}")
+
+    except Exception as e:
+        print("[SESSION][ERROR] Failed to load theme dynamically:", e)
 
     try:
 
@@ -39,7 +72,6 @@ def run_session(session_id, conn):
         outbound = OutboundDispatcher(ctx.bus, get_sessions(), deployment)
         ctx.inbound, ctx.outbound = inbound, outbound
 
-        app = QApplication(sys.argv)
         win = SessionWindow(
             deployment_id=deployment.get("id"),
             session_id=ctx.id,
@@ -51,8 +83,7 @@ def run_session(session_id, conn):
             outbound=outbound
         )
 
-        # 🔗 Add QTimer for pipe polling
-        from PyQt5.QtCore import QTimer
+        # Add QTimer for pipe polling
         def poll_conn():
             if conn.poll():
                 msg = conn.recv()
@@ -63,8 +94,25 @@ def run_session(session_id, conn):
         timer.timeout.connect(poll_conn)
         timer.start(200)  # every 200 ms
 
+        win.setWindowFlag(Qt.WindowType.FramelessWindowHint, True)
+        win.setWindowFlag(Qt.WindowType.Tool, True)
+        win.setAttribute(Qt.WidgetAttribute.WA_NativeWindow, True)
+        win.setAttribute(Qt.WidgetAttribute.WA_DontCreateNativeAncestors, True)
+
         win.show()
-        app.exec_()
+        try:
+            # Send the native window id so the cockpit can embed this window
+            wid = int(win.winId())
+            conn.send({
+                "type": "window_ready",
+                "session_id": session_id,
+                "win_id": wid
+            })
+        except Exception as e:
+            emit_gui_exception_log("session_window.run_session.window_ready", e)
+
+        app.exec()
+
 
     except Exception as e:
         emit_gui_exception_log("session_window.run_session", e)
@@ -91,6 +139,13 @@ class SessionWindow(QMainWindow):
             self.log_paused = False
             self.last_log_ts = None
             self.current_log_title = ""
+
+            # refs to Panels
+            self._restart_agent_panel=None
+            self._replace_panel=None
+            self._hotswap_panel=None
+            self._inject_panel = None
+            self._delete_agent_panel=None
 
             self.resize(1000, 700)
             self.setMinimumHeight(650)
@@ -169,7 +224,7 @@ class SessionWindow(QMainWindow):
             box.setLayout(layout)
             return box
         except Exception as e:
-            emit_gui_exception_log("session_window._update_log_status_bar", e)
+            emit_gui_exception_log("session_window._build_tree_panel", e)
 
     def _handle_agent_selected(self, session_id, node, panels=None, **_):
         if not panels:
@@ -201,15 +256,10 @@ class SessionWindow(QMainWindow):
 
         # Only update toolbar if we actually collected something
         if all_buttons:
-            self.control_bar.clear_buttons()
-            # add Home button at the end
-            self.control_bar.add_button("🏠", "Home", self.show_default_panel)
-            for btn in all_buttons:
-                self.control_bar.add_button(btn.icon, btn.text, btn.handler)
-
-            print("[DEBUG] Added Home button")
+            self.control_bar.clear_secondary_buttons()
+            self.control_bar.add_secondary_buttons(all_buttons)
         else:
-            print("[DEBUG] No specialty panel buttons to add; leaving toolbar unchanged")
+            self.control_bar.clear_secondary_buttons()
 
     def _load_custom_panel(self, panel_name, node):
         try:
@@ -246,11 +296,19 @@ class SessionWindow(QMainWindow):
             self.detail_panel.config_group.setVisible(False)
             return self.detail_panel
         except Exception as e:
-            emit_gui_exception_log("session_window._update_log_status_bar", e)
+            emit_gui_exception_log("session_window._build_inspector_panel", e)
 
     def show_default_panel(self):
-        self.stacked.setCurrentWidget(self.default_panel)
-        self.control_bar.reset_to_default()
+        """
+        Return to the main cockpit view without resetting the whole toolbar.
+        """
+        try:
+            self.stacked.setCurrentWidget(self.default_panel)
+            # Only clear the secondary rack — keep the default top row
+            if hasattr(self, "control_bar"):
+                self.control_bar.clear_secondary_buttons()
+        except Exception as e:
+            emit_gui_exception_log("SessionWindow.show_default_panel", e)
 
     def show_specialty_panel(self, panel: QWidget):
 
@@ -262,21 +320,23 @@ class SessionWindow(QMainWindow):
                 self.stacked.addWidget(panel)
             self.stacked.setCurrentWidget(panel)
 
-            self.control_bar.clear_buttons()
+            self.control_bar.clear_secondary_buttons()
+
             if hasattr(panel, "get_panel_buttons"):
                 buttons = panel.get_panel_buttons()
-                print(f"[DEBUG] get_panel_buttons returned {len(buttons)} items: {[b.text for b in buttons]}")
                 for btn in buttons:
-                    print(f"[DEBUG] Adding button: {btn.text} (icon={btn.icon})")
-                    self.control_bar.add_button(btn.icon, btn.text, btn.handler)
+                    self.control_bar.add_secondary_buttons([btn])
             else:
-                print("[DEBUG] Panel has no get_panel_buttons()")
+                self.control_bar.hide_secondary_row()
+
+            # Always keep the main rack visible
+            self.control_bar.show_secondary_row()
 
             # Always add Home
-            self.control_bar.add_button("🏠", "Home", self.show_default_panel)
+            self.control_bar.add_prefix_button("🔙", "Main", self.show_default_panel)
             print("[DEBUG] Added Home button")
         except Exception as e:
-            emit_gui_exception_log("session_window._update_log_status_bar", e)
+            emit_gui_exception_log("session_window.show_specialty_panel", e)
 
 
     def _build_log_panel(self):
@@ -289,7 +349,6 @@ class SessionWindow(QMainWindow):
             layout.setSpacing(4)
 
             # Status line inside the box
-            from matrix_gui.theme.utils.hive_ui import StatusLabel
             self.log_status_label = StatusLabel("Agent Logs: —")
             layout.addWidget(self.log_status_label)
 
@@ -301,7 +360,7 @@ class SessionWindow(QMainWindow):
             box.setLayout(layout)
             return box
         except Exception as e:
-            emit_gui_exception_log("session_window._update_log_status_bar", e)
+            emit_gui_exception_log("session_window._build_log_panel", e)
 
 
 
@@ -324,18 +383,9 @@ class SessionWindow(QMainWindow):
             main_layout.setStretch(0, 1)
             main_layout.setStretch(1, 3)
         except Exception as e:
-            emit_gui_exception_log("session_window._update_log_status_bar", e)
+            emit_gui_exception_log("session_window._setup_main_layout", e)
 
-    # --- Delete Agent ---
-    def _launch_delete_agent_modal(self):
-
-        try:
-            deployment=copy.deepcopy(self.deployment)
-            dlg = DeleteAgentDialog(session_id=self.session_id, bus=self.bus, conn=self.conn, deployment=deployment, parent=self)
-            dlg.exec_()
-        except Exception as e:
-            emit_gui_exception_log("session_window._update_log_status_bar", e)
-
+  
     # --- Log Update ---
     def _handle_log_update(self, session_id, channel, source, payload, **_):
         try:
@@ -357,7 +407,7 @@ class SessionWindow(QMainWindow):
 
             self._update_log_status_bar()
         except Exception as e:
-            emit_gui_exception_log("session_window._update_log_status_bar", e)
+            emit_gui_exception_log("session_window._handle_log_update", e)
 
 
     def _on_log_count_changed(self, count: int):
@@ -371,7 +421,7 @@ class SessionWindow(QMainWindow):
             group.setVisible(visible)
             # Optionally: self.control_bar.config_btn.setChecked(visible)
         except Exception as e:
-            emit_gui_exception_log("session_window._update_log_status_bar", e)
+            emit_gui_exception_log("session_window.toggle_config_panel", e)
 
     def toggle_threads_panel(self):
         try:
@@ -380,7 +430,7 @@ class SessionWindow(QMainWindow):
             group.setVisible(visible)
             # Optionally: self.control_bar.threads_btn.setChecked(visible)
         except Exception as e:
-            emit_gui_exception_log("session_window._update_log_status_bar", e)
+            emit_gui_exception_log("session_window.toggle_threads_panel", e)
 
     def _toggle_log_pause(self):
 
@@ -389,27 +439,90 @@ class SessionWindow(QMainWindow):
             # Optionally: self.control_bar.pause_btn.setChecked(self.log_paused)
             self._update_log_status_bar()
         except Exception as e:
-            emit_gui_exception_log("session_window._update_log_status_bar", e)
+            emit_gui_exception_log("session_window._toggle_log_pause", e)
 
+    def _launch_restart_agent(self, uid: str = None):
+        try:
+            if not isinstance(self._restart_agent_panel, RestartAgentPanel):
+                self._restart_agent_panel = RestartAgentPanel(
+                    session_id=self.session_id,
+                    bus=self.bus,
+                    conn=self.conn,
+                    deployment=self.deployment,
+                    parent=self
+                )
+            self._restart_agent_panel.launch(uid)
+        except Exception as e:
+            emit_gui_exception_log("session_window._launch_restart_agent_panel", e)
 
-    def _launch_restart_agent(self):
+        # --- Delete Agent ---
+
+    def _launch_delete_agent(self, uid: str = None):
 
         try:
-            deployment = copy.deepcopy(self.deployment)
-            dlg = RestartAgentDialog(session_id=self.session_id, bus=self.bus, conn=self.conn, deployment=deployment ,parent=self)
-            dlg.exec_()
+            if not isinstance(self._delete_agent_panel, DeleteAgentPanel):
+                self._delete_agent_panel = DeleteAgentPanel(
+                    session_id=self.session_id,
+                    bus=self.bus,
+                    conn=self.conn,
+                    deployment=self.deployment,
+                    parent=self
+                )
+            self._delete_agent_panel.launch(uid)
         except Exception as e:
-            emit_gui_exception_log("session_window._update_log_status_bar", e)
+            emit_gui_exception_log("session_window._launch_delete_agent_modal", e)
 
 
     def _launch_replace_agent_source(self):
-
         try:
-            deployment=copy.deepcopy(self.deployment)
-            dlg = ReplaceAgentDialog(session_id=self.session_id, bus=self.bus, conn=self.conn, deployment=deployment ,parent=self)
-            dlg.exec_()
+
+            if not isinstance(self._replace_panel, ReplaceAgentPanel):
+                self._replace_panel = ReplaceAgentPanel(
+                    session_id=self.session_id,
+                    bus=self.bus,
+                    conn=self.conn,
+                    deployment=self.deployment,
+                    parent=self
+                )
+            self._replace_panel.launch()
         except Exception as e:
-            emit_gui_exception_log("session_window._update_log_status_bar", e)
+            emit_gui_exception_log("session_window._launch_replace_agent_source", e)
+
+    def _launch_hotswap_agent_modal(self, uid: str = None):
+        try:
+
+            if not isinstance(self._hotswap_panel, HotswapAgentPanel):
+
+                self._hotswap_panel = HotswapAgentPanel(
+                    session_id=self.session_id,
+                    bus=self.bus,
+                    conn=self.conn,
+                    deployment=self.deployment,
+                    parent=self
+                )
+            tree_data=self.tree.get_rendered_tree()
+            self._hotswap_panel.launch(tree_data, uid)
+
+        except Exception as e:
+            emit_gui_exception_log("SessionWindow._launch_hotswap_agent_modal", e)
+
+    def _launch_inject_agent_modal(self, uid: str = None):
+        try:
+
+            if not isinstance(self._inject_panel, InjectAgentPanel):
+
+                self._inject_panel = InjectAgentPanel(
+                    session_id=self.session_id,
+                    bus=self.bus,
+                    conn=self.conn,
+                    deployment=self.deployment,
+                    parent=self
+                )
+
+            self._inject_panel.launch(uid)
+
+        except Exception as e:
+            emit_gui_exception_log("SessionWindow._launch_inject_agent_modal", e)
 
     def show_crypto_alert_panel(self):
         if "crypto_alert_panel" not in self._panel_cache:
@@ -452,7 +565,7 @@ class SessionWindow(QMainWindow):
             status_bar = QToolBar("Session Status", self)
             status_bar.setMovable(False)
             status_bar.addWidget(self.status_label)
-            self.addToolBar(Qt.BottomToolBarArea, status_bar)
+            self.addToolBar(Qt.ToolBarArea.BottomToolBarArea, status_bar)
         except Exception as e:
             emit_gui_exception_log("session_window._update_log_status_bar", e)
 
@@ -468,16 +581,15 @@ class SessionWindow(QMainWindow):
         except Exception as e:
             emit_gui_exception_log("SessionWindow.save_deployment_to_vault", e)
 
-
     def handle_deployment_update(self, dep_id, deployment):
         try:
-            if dep_id == self.deployment_id:
-                self.deployment = copy.deepcopy(deployment)
-                print(f"[SESSION] 🔄 Deployment {dep_id} synced from cockpit")
+            self.deployment = deployment
+
+            if hasattr(self, "_panel_cache"):
+
                 for panel in self._panel_cache.values():
                     if hasattr(panel, "on_deployment_updated"):
-                        panel.on_deployment_updated(copy.deepcopy(deployment))
-
+                        panel.on_deployment_updated(deployment)
         except Exception as e:
             emit_gui_exception_log("SessionWindow.handle_deployment_update", e)
 

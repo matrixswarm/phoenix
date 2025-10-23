@@ -35,7 +35,7 @@ def load_cert_chain_from_memory(ctx: ssl.SSLContext, cert_pem: str, key_pem: str
         cert_der = cert.public_bytes(serialization.Encoding.DER)
         pin = extract_spki_pin_from_der(cert_der)
 
-        return pin
+        return pin, cert_path, key_path
 
     finally:
         # DO NOT delete immediately; let TLS handshake fully complete

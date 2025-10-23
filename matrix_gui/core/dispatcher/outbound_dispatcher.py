@@ -1,6 +1,7 @@
 from matrix_gui.core.emit_gui_exception_log import emit_gui_exception_log
 from matrix_gui.config.boot.globals import get_sessions
 from matrix_gui.core.class_lib.packet_delivery.packet.standard.command.packet import Packet
+from matrix_gui.core.class_lib.packet_delivery.utility.security.packet_security import wrap_packet_securely
 class OutboundDispatcher:
     """
     Dispatches outbound messages from the GUI to the Matrix swarm.
@@ -55,10 +56,23 @@ class OutboundDispatcher:
                     return candidate
         return None
 
-    def _handle_outbound(self, session_id, channel, packet:Packet):
+    def _handle_outbound(self, session_id, channel, packet:Packet,
+                                                     security_sig=True,
+                                                     security_encryption=True,
+                                                     security_target_universal_id="matrix"):
         try:
             ctx = get_sessions().get(session_id)
             dep = ctx.group.get("deployment", {}) if ctx else {}
+
+            #security checkpoint
+            original_data = packet.get_packet()
+            packet = wrap_packet_securely(
+                original_data,
+                deployment=dep,
+                sign=security_sig,
+                encrypt=security_encryption,
+                target_uid=security_target_universal_id
+            )
 
             # Find the agent by channel role
             agent = None

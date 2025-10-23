@@ -1,4 +1,8 @@
-from PyQt5 import QtWidgets
+from PyQt6 import QtWidgets
+from PyQt6.QtWidgets import QMessageBox
+from PyQt6.QtWidgets import QAbstractItemView
+from PyQt6.QtGui import QCursor
+from PyQt6.QtCore import Qt
 from matrix_gui.modules.net.edit_connection_dialog import edit_connection_dialog
 from matrix_gui.core.event_bus import EventBus
 
@@ -20,8 +24,10 @@ class ConnectionManagerDialog(QtWidgets.QDialog):
             table.setHorizontalHeaderLabels(
                 ["Label", "Host / Target", "Port / Channel", "Default Channel", "Used In", "Serial"]
             )
-            table.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectRows)
-            table.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers)
+            table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+            table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+            table.cellDoubleClicked.connect(self.edit_selected)
+            table.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
             self.tables[proto] = table
             self.tabs.addTab(table, proto.upper())
 
@@ -77,7 +83,7 @@ class ConnectionManagerDialog(QtWidgets.QDialog):
             host_or_target = data.get("host") or data.get("channel_id") or ""
             table.setItem(row, 1, QtWidgets.QTableWidgetItem(str(host_or_target)))
             # Port / Channel
-            port_or_channel = data.get("port") or data.get("chat_id") or data.get("api_key", "")[:6] + "…" or ""
+            port_or_channel = data.get("port") or data.get("chat_id") or (str(data.get("api_key", ""))[:6] + "…") or ""
             table.setItem(row, 2, QtWidgets.QTableWidgetItem(str(port_or_channel)))
             # Default Channel
             table.setItem(row, 3, QtWidgets.QTableWidgetItem(str(data.get("default_channel", ""))))
@@ -88,6 +94,8 @@ class ConnectionManagerDialog(QtWidgets.QDialog):
 
     def current_proto_and_table(self):
         idx = self.tabs.currentIndex()
+        if idx < 0:
+            return None, None
         proto = self.tabs.tabText(idx).lower()
         return proto, self.tables[proto]
 
@@ -105,24 +113,33 @@ class ConnectionManagerDialog(QtWidgets.QDialog):
         return used
 
     def add_entry(self):
+
         proto, _ = self.current_proto_and_table()
         conn_id, data = edit_connection_dialog(self, default_proto=proto, data={})
-        if conn_id:
-            new_proto = data.get("proto", proto)
-            cm_all = self.get_connection_manager()
-            cm_all.setdefault(new_proto, {})[conn_id] = data
-            self.load_table(new_proto)
-            EventBus.emit("vault.save.requested")
 
-    def edit_selected(self):
+
+        if not conn_id or not data:
+            return
+
+        new_proto = data.get("proto", proto)
+        cm_all = self.get_connection_manager()
+        cm_all.setdefault(new_proto, {})[conn_id] = data
+        self.load_table(new_proto)
+        EventBus.emit("vault.save.requested")
+
+    def edit_selected(self, row=None, column=None):
         proto, table = self.current_proto_and_table()
-        row = table.currentRow()
+
+        if row is None:
+            row = table.currentRow()
+
         if row < 0:
             return
 
         item = table.item(row, 0)
         if not item:
-            return  # nothing selected or row not populated
+            return
+
         label = item.text()
         conn_id = self.find_conn_id_by_label(proto, label)
         cm_all = self.get_connection_manager()
@@ -170,7 +187,7 @@ class ConnectionManagerDialog(QtWidgets.QDialog):
             self, "Confirm Delete",
             f"Delete connection '{conn_id}'?"
         )
-        if confirm == QtWidgets.QMessageBox.Yes:
+        if confirm == QMessageBox.StandardButton.Yes:
             self.get_connection_manager()[proto].pop(conn_id, None)
             self.load_table(proto)
             EventBus.emit("vault.save.requested")

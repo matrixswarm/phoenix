@@ -1,5 +1,5 @@
 from abc import ABCMeta, abstractmethod
-from PyQt5.QtWidgets import QWidget
+from PyQt6.QtWidgets import QWidget
 
 # Hybrid metaclass: combines Qt's QWidget metaclass and ABCMeta
 class PanelABCMeta(type(QWidget), ABCMeta):

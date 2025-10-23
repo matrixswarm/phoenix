@@ -1,10 +1,10 @@
 import json
 import time
 
-from PyQt5.QtWidgets import (QWidget, QFrame, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton,
+from PyQt6.QtWidgets import (QWidget, QFrame, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton,
                              QSizePolicy, QComboBox, QSpinBox, QMessageBox, QScrollArea, QGroupBox, QCheckBox, QLayout)
-from PyQt5.QtGui import QColor
-from PyQt5.QtCore import QRect, QSize, Qt, QPoint, QTimer
+from PyQt6.QtGui import QColor
+from PyQt6.QtCore import QRect, QSize, Qt, QPoint, QTimer
 from matrix_gui.core.emit_gui_exception_log import emit_gui_exception_log
 from matrix_gui.core.class_lib.packet_delivery.packet.standard.command.packet import Packet
 

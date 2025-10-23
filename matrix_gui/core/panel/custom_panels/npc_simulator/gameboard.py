@@ -1,15 +1,15 @@
 # Authored by Daniel F MacDonald and ChatGPT-5 aka The Generals
 import uuid, time
-from PyQt5.QtWidgets import QVBoxLayout, QLabel, QGridLayout, QPushButton, QHBoxLayout
+from PyQt6.QtWidgets import QVBoxLayout, QLabel, QGridLayout, QPushButton, QHBoxLayout
 from matrix_gui.core.class_lib.packet_delivery.packet.standard.command.packet import Packet
 from matrix_gui.core.panel.control_bar import PanelButton
 from matrix_gui.core.emit_gui_exception_log import emit_gui_exception_log
-from PyQt5.QtMultimedia import QSoundEffect
-from PyQt5.QtCore import QUrl
+from PyQt6.QtMultimedia import QSoundEffect
+from PyQt6.QtCore import QUrl
 
-from PyQt5.QtCore import QThread, QMetaObject, Qt, pyqtSlot, Q_ARG
-from PyQt5.QtWidgets import QApplication
-from PyQt5.QtCore import QTimer
+from PyQt6.QtCore import QThread, QMetaObject, Qt, pyqtSlot, Q_ARG
+from PyQt6.QtWidgets import QApplication
+from PyQt6.QtCore import QTimer
 from collections import deque
 from matrix_gui.core.panel.custom_panels.interfaces.base_panel_interface import PhoenixPanelInterface
 
@@ -70,7 +70,7 @@ class Gameboard(PhoenixPanelInterface):
 
             # Title
             title = QLabel("🎮 NPC Simulator Panel")
-            title.setAlignment(Qt.AlignCenter)
+            title.setAlignment(Qt.AlignmentFlag.AlignCenter)
             title.setStyleSheet("font-weight: bold; font-size: 16px;")
             layout.addWidget(title)
 
@@ -104,7 +104,7 @@ class Gameboard(PhoenixPanelInterface):
                 for x in range(self.grid_size):
                     cell = QLabel(" ")
                     cell.setFixedSize(20, 20)
-                    cell.setAlignment(Qt.AlignCenter)
+                    cell.setAlignment(Qt.AlignmentFlag.AlignCenter)
                     cell.setStyleSheet("border: 1px solid #333; background: #111; color: #fff;")
                     self.grid.addWidget(cell, y, x)
                     row.append(cell)
@@ -280,8 +280,6 @@ class Gameboard(PhoenixPanelInterface):
                 }
             })
 
-            pk.set_payload_item("handler", "cmd_control_npcs")
-
             self.bus.emit(
                 "outbound.message",
                 session_id=self.session_id,
@@ -343,7 +341,7 @@ class Gameboard(PhoenixPanelInterface):
             self._frame_queue.append((player_pos, npc_list))
 
             # schedule the consumer to run on GUI thread
-            QMetaObject.invokeMethod(self, "_drain_frame_queue", Qt.QueuedConnection)
+            QMetaObject.invokeMethod(self, "_drain_frame_queue", Qt.ConnectionType.QueuedConnection)
 
         except Exception as e:
             emit_gui_exception_log("Gameboard._handle_gameboard_response", e)
@@ -384,8 +382,6 @@ class Gameboard(PhoenixPanelInterface):
                     "payload": payload
                 }
             })
-
-            pk.set_payload_item("handler", cmd_handler)
 
             self.bus.emit(
                 "outbound.message",

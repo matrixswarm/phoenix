@@ -1,9 +1,8 @@
-import os
-from PyQt5.QtWidgets import QWidget, QHBoxLayout, QToolButton
-from PyQt5.QtCore import Qt, QSize
-from PyQt5.QtGui import QFont, QIcon
+from PyQt6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QToolButton, QToolBar
+from PyQt6.QtCore import Qt, QSize
+from PyQt6.QtGui import QFont, QIcon
 from matrix_gui.core.emit_gui_exception_log import emit_gui_exception_log
-from PyQt5.QtWidgets import QToolBar
+import os
 
 
 class PanelButton:
@@ -16,47 +15,55 @@ class PanelButton:
 class ControlBar(QWidget):
     def __init__(self, session_window):
         super().__init__(session_window)
-
         try:
             self.session_window = session_window
 
-            # horizontal layout instead of QToolBar
-            self.layout = QHBoxLayout(self)
+            # === Layout ===
+            self.layout = QVBoxLayout(self)
             self.layout.setContentsMargins(4, 2, 4, 2)
-            self.layout.setSpacing(8)
-            self.setLayout(self.layout)
+            self.layout.setSpacing(4)
 
-            font = QFont("Segoe UI Emoji", 9)
-            self.setFont(font)
-
+            # --- Global font & icon setup ---
             self.icon_size = QSize(32, 32)
+            self.setFont(QFont("Segoe UI Emoji", 9))
 
-            # Build default buttons
+            # --- Row 1: Default buttons ---
+            self.top_row = QHBoxLayout()
+            self.top_row.setSpacing(8)
+            self.layout.addLayout(self.top_row)
+
+            # --- Row 2: Context buttons (hidden by default) ---
+            self.secondary_row = QHBoxLayout()
+            self.secondary_row.setSpacing(6)
+            self.secondary_row.setContentsMargins(0, 0, 0, 0)
+            self.secondary_row.setAlignment(Qt.AlignmentFlag.AlignLeft)  # ← add this
+            self.layout.addLayout(self.secondary_row)
+            self._secondary_visible = False
+
             self.default_buttons = []
             self._build_default_buttons()
 
-            # mount at top of window
-            session_window.addToolBar(Qt.TopToolBarArea, self._as_toolbar_proxy())
+            # Mount into QToolBar proxy
+            session_window.addToolBar(Qt.ToolBarArea.TopToolBarArea, self._as_toolbar_proxy())
+
         except Exception as e:
-            emit_gui_exception_log("session_window._update_log_status_bar", e)
+            emit_gui_exception_log("control_bar.__init__", e)
 
-
-    # ---- Helpers -------------------------------------------------
+    # -----------------------------------
+    # Default + contextual button helpers
+    # -----------------------------------
     def _make_button(self, icon, text, handler):
-
         try:
             btn = QToolButton()
             btn.setFont(self.font())
-            btn.setIconSize(self.icon_size)
-            btn.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
+            btn.setIconSize(getattr(self, "icon_size", QSize(28, 28)))
+            btn.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
 
             if icon and (icon.endswith(".png") or icon.endswith(".svg")) and os.path.exists(icon):
                 btn.setIcon(QIcon(icon))
             elif icon:
-                # fallback: emoji as text prefix
                 btn.setText(f"{icon} {text}")
-
-            if text and not btn.text():
+            elif text:
                 btn.setText(text)
 
             if handler:
@@ -64,109 +71,135 @@ class ControlBar(QWidget):
 
             return btn
         except Exception as e:
-            emit_gui_exception_log("session_window._update_log_status_bar", e)
-
-
-    def add_button(self, icon, text, handler, add_to_bar=True):
-
-        try:
-            print(f"[DEBUG] ControlBar.add_button called with icon={icon}, text={text}")
-            btn = self._make_button(icon, text, handler)
-            if add_to_bar:
-                self.layout.addWidget(btn)
-            return btn
-        except Exception as e:
-            emit_gui_exception_log("session_window._update_log_status_bar", e)
-
-    def clear_buttons(self):
-        while self.layout.count():
-
-            try:
-                item = self.layout.takeAt(0)
-                widget = item.widget()
-                if widget:
-                    widget.setParent(None)
-            except Exception as e:
-                emit_gui_exception_log("session_window._update_log_status_bar", e)
-
-
-    def reset_to_default(self):
-        try:
-            self.clear_buttons()
-            for btn in self.default_buttons:
-                self.layout.addWidget(btn)
-        except Exception as e:
-            emit_gui_exception_log("session_window._update_log_status_bar", e)
-
+            emit_gui_exception_log("control_bar._make_button", e)
 
     def _make_toggle_button(self, icon, text, check_fn, toggle_fn):
         try:
             btn = QToolButton()
             btn.setFont(self.font())
             btn.setIconSize(self.icon_size)
-            btn.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
+            btn.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
             btn.setCheckable(True)
             btn.setChecked(check_fn())
             btn.setText(f"{icon} {text}")
             btn.toggled.connect(toggle_fn)
             return btn
         except Exception as e:
-            emit_gui_exception_log("session_window._update_log_status_bar", e)
+            emit_gui_exception_log("control_bar._make_toggle_button", e)
 
-    # ---- Build default/global buttons ----------------------------
-    def _build_default_buttons(self):
+    # -----------------------------------
+    # Public interface
+    # -----------------------------------
+    def clear_buttons(self):
+        while self.top_row.count():
+            item = self.top_row.takeAt(0)
+            w = item.widget()
+            if w:
+                w.deleteLater()
 
-        try:
-            self.default_buttons = []
-            self.default_buttons.append(
-                self._make_button("☠️", "Delete Agent", self.session_window._launch_delete_agent_modal))
-            self.default_buttons.append(
-                self._make_button("♻️", "Replace Source", self.session_window._launch_replace_agent_source))
+    def clear_secondary_buttons(self):
+        """
+        Clears all non-prefix buttons from the secondary rack.
+        Keeps any button explicitly tagged with _is_prefix=True.
+        """
+        keepers = []
+        for i in range(self.secondary_row.count()):
+            item = self.secondary_row.itemAt(i)
+            w = item.widget()
+            if w and getattr(w, "_is_prefix", False):
+                keepers.append(w)
 
-            #will be rewired soon
-            #self.default_buttons.append(
-            #    self._make_button("🔄", "Restart Agent", self.session_window._launch_restart_agent))
+        # wipe everything
+        while self.secondary_row.count():
+            item = self.secondary_row.takeAt(0)
+            w = item.widget()
+            if w and not getattr(w, "_is_prefix", False):
+                w.deleteLater()
 
-            self.default_buttons.append(
-                self._make_toggle_button(
-                    "🧵", "Threads",
-                    lambda: self.session_window.detail_panel.inspector_group.isVisible(),
-                    self.session_window.toggle_threads_panel
-                )
-            )
-            self.default_buttons.append(
-                self._make_toggle_button(
-                    "⚙️", "Config",
-                    lambda: self.session_window.detail_panel.config_group.isVisible(),
-                    self.session_window.toggle_config_panel
-                )
-            )
-            self.default_buttons.append(
-                self._make_toggle_button(
-                    "⏸️", "Pause Logs",
-                    lambda: self.session_window.log_paused,
-                    self.session_window._toggle_log_pause
-                )
-            )
+        # reinsert kept prefix buttons
+        for k in keepers:
+            self.secondary_row.addWidget(k)
 
+    def add_secondary_buttons(self, panel_buttons):
+        """
+        Accepts either PanelButton definitions or fully built QToolButton widgets.
+        """
+        for pb in panel_buttons:
+            # Case 1: already a button widget
+            if isinstance(pb, QToolButton):
+                self.secondary_row.addWidget(pb)
+                continue
 
+            # Case 2: a PanelButton-like data holder
+            icon = getattr(pb, "icon", "")
+            text = getattr(pb, "text", "")
+            handler = getattr(pb, "handler", None)
+            btn = self._make_button(icon, text, handler)
+            self.secondary_row.addWidget(btn)
 
-            #self.default_buttons.append(
-            #    self._make_button("📈", "Crypto Alerts", self.session_window.show_crypto_alert_panel)
-            #)
+        self.show_secondary_row()
 
-            self.reset_to_default()
+    def hide_secondary_row(self):
+        self._secondary_visible = False
+        for i in range(self.secondary_row.count()):
+            item = self.secondary_row.itemAt(i)
+            if item and item.widget():
+                item.widget().hide()
+        self.secondary_row.setSpacing(0)
 
-        except Exception as e:
-            emit_gui_exception_log("session_window._update_log_status_bar", e)
+    def show_secondary_row(self):
+        self._secondary_visible = True
+        for i in range(self.secondary_row.count()):
+            item = self.secondary_row.itemAt(i)
+            if item and item.widget():
+                item.widget().show()
+        self.secondary_row.setSpacing(6)
 
+    def reset_to_default(self):
+        self.clear_buttons()
+        for btn in self.default_buttons:
+            self.top_row.addWidget(btn)
+        self.clear_secondary_buttons()
 
-    # ---- Adapter so SessionWindow can still use addToolBar() -----
     def _as_toolbar_proxy(self):
-        try:
+        proxy = QToolBar("ControlBarProxy")
+        proxy.addWidget(self)
+        return proxy
 
-            proxy = QToolBar("ControlBarProxy")
-            proxy.addWidget(self)
-            return proxy
+    # -----------------------------------
+    # Build default row
+    # -----------------------------------
+    def _build_default_buttons(self):
+        try:
+            self.default_buttons = [
+                self._make_button("☠️", "Delete Agent", self.session_window._launch_delete_agent),
+                self._make_button("♻️", "Replace Source", self.session_window._launch_replace_agent_source),
+                self._make_button("🔄", "Restart Agent", self.session_window._launch_restart_agent),
+                self._make_button("🔥", "Hotswap Agent", self.session_window._launch_hotswap_agent_modal),
+                self._make_button("🧬", "Inject Agent", self.session_window._launch_inject_agent_modal),
+
+
+                self._make_toggle_button("🧵", "Threads",
+                    lambda: self.session_window.detail_panel.inspector_group.isVisible(),
+                    self.session_window.toggle_threads_panel),
+                self._make_toggle_button("⚙️", "Config",
+                    lambda: self.session_window.detail_panel.config_group.isVisible(),
+                    self.session_window.toggle_config_panel),
+                self._make_toggle_button("⏸️", "Pause Logs",
+                    lambda: self.session_window.log_paused,
+                    self.session_window._toggle_log_pause)
+            ]
+            for b in self.default_buttons:
+                self.top_row.addWidget(b)
         except Exception as e:
-            emit_gui_exception_log("session_window._update_log_status_bar", e)
+            emit_gui_exception_log("control_bar._build_default_buttons", e)
+
+    def add_prefix_button(self, icon="🏠", text="Main", handler=None):
+        if not handler:
+            return
+        if hasattr(self, "_prefix_btn") and self._prefix_btn:
+            self.secondary_row.removeWidget(self._prefix_btn)
+            self._prefix_btn.deleteLater()
+        self._prefix_btn = self._make_button(icon, text, handler)
+        self._prefix_btn._is_prefix = True  # <-- Tag as persistent
+        self.secondary_row.insertWidget(0, self._prefix_btn)

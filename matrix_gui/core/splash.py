@@ -1,16 +1,24 @@
-from PyQt5.QtWidgets import QWidget, QApplication
-from PyQt5.QtGui import QPixmap, QFont, QPainter
-from PyQt5.QtCore import Qt, QTimer, QRect
 import sys
+from PyQt6.QtWidgets import QWidget, QApplication
+from PyQt6.QtGui import QPixmap, QFont, QPainter
+from PyQt6.QtCore import Qt, QTimer, QRect
+
+
 
 class PhoenixSplash(QWidget):
     def __init__(self):
         super().__init__()
-        self.setWindowFlags(Qt.SplashScreen | Qt.FramelessWindowHint)
-        self.logo = QPixmap("matrix_gui/theme/matrixswarm_logo.png")  # 786x747 or your latest PNG
+        # --- window flags ---
+        self.setWindowFlags(
+            Qt.WindowType.SplashScreen | Qt.WindowType.FramelessWindowHint
+        )
+        self.setWindowModality(Qt.WindowModality.NonModal)
+        self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, True)
+        self.logo = QPixmap("matrix_gui/theme/matrixswarm_logo.png")
         self.setFixedSize(self.logo.width(), self.logo.height())
         self.setStyleSheet("background: black;")
         self.font = QFont("Consolas", 10)
+
         self.text = "Establishing Trust Lineage..."
         self.messages = [
             "Decrypting Vault…",
@@ -20,7 +28,6 @@ class PhoenixSplash(QWidget):
         ]
         self.index = 0
 
-        # Cycle message
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.next_message)
         self.timer.start(1200)
@@ -32,21 +39,22 @@ class PhoenixSplash(QWidget):
 
     def paintEvent(self, event):
         painter = QPainter(self)
-        # Draw logo, fully centered
         painter.drawPixmap(0, 0, self.logo)
-
-        # Draw dynamic text: center in "white space" (adjust Y for your logo)
         painter.setFont(self.font)
-        painter.setPen(Qt.white)
-        # --- Adjust Y for perfect alignment below logo/crown ---
-        text_y = self.height() - 30  # Try 90, 110, 120 px from bottom (experiment!)
-        rect = QRect(0, text_y, self.width(), 60)
-        painter.drawText(rect, Qt.AlignHCenter | Qt.AlignTop, self.text)
+        painter.setPen(Qt.GlobalColor.white)
 
-# --- To use in your main ---
+        text_y = self.height() - 30
+        rect = QRect(0, text_y, self.width(), 60)
+        painter.drawText(
+            rect,
+            Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop,
+            self.text,
+        )
+
+
 if __name__ == "__main__":
     app = QApplication(sys.argv)
     splash = PhoenixSplash()
     splash.show()
-    QTimer.singleShot(7000, splash.close)  # Demo auto-close
-    sys.exit(app.exec_())
+    QTimer.singleShot(7000, splash.close)
+    sys.exit(app.exec())

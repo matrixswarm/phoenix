@@ -1,4 +1,4 @@
-from PyQt5.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton
+from PyQt6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton
 
 class PasswordPromptDialog(QDialog):
     def __init__(self, title="Enter Password", prompt="Provide password", parent=None):
@@ -14,7 +14,7 @@ class PasswordPromptDialog(QDialog):
 
         row = QHBoxLayout()
         self.edit = QLineEdit()
-        self.edit.setEchoMode(QLineEdit.Password)
+        self.edit.setEchoMode(QLineEdit.EchoMode.Password)
         self.edit.setPlaceholderText("••••••••")
         row.addWidget(self.edit, 1)
 
@@ -42,7 +42,7 @@ class PasswordPromptDialog(QDialog):
     def _toggle_echo(self):
         self._visible = self.toggle_btn.isChecked()
 
-        self.edit.setEchoMode(QLineEdit.Normal if self._visible else QLineEdit.Password)
+        self.edit.setEchoMode(QLineEdit.EchoMode.Normal if self._visible else QLineEdit.EchoMode.Password)
         self.toggle_btn.setText("🙈" if self._visible else "👁")
 
     def _accept(self):
@@ -52,5 +52,5 @@ class PasswordPromptDialog(QDialog):
     @staticmethod
     def get_password(parent=None, title="Enter Password", prompt="Provide password"):
         dlg = PasswordPromptDialog(title, prompt, parent)
-        ok = (dlg.exec_() == dlg.Accepted)
+        ok = (dlg.exec() == dlg.DialogCode.Accepted)
         return (dlg.password, ok)

@@ -1,17 +1,23 @@
 ## Phoenix Cockpit
+Phoenix Cockpit is the GUI control plane for MatrixOS — a secure multi-agent runtime for orchestrating autonomous services.
+(from the MatrixSwarm ecosystem )
 
-(from the MatrixSwarm ecosystem)
-
-Phoenix Cockpit is the secure command bridge for the MatrixSwarm/MatrixOs.
-It’s not a toy GUI — it’s the operator’s deck: unlock the vault, connect to deployments, command the swarm, and watch the agents breathe.
-
-Built with PyQt5.
-
+#### Built with PyQt6 ≥ 6.6
+#### Python ≥ 3.10 is required
+#### MatrixOS https://github.com/matrixswarm/matrixos required
 * Enforces vault unlock → command flow (no unlocked vault, no ops).
 * Visualizes universes, deployments, agents, and their threads.
 * Streams logs, status, and service responses in real time.
 * Every packet verified, every heartbeat tracked.
 
+---
+https://youtu.be/hwQagK71TJc
+## 🎬 Watch how to deploy a swarm using Phoenix Cockpit
+
+This video demonstrates the self-healing power of MatrixSwarm. Even after manually terminating nearly every agent, the swarm fully regenerates from a single surviving guardian.
+
+[![Designing a MatrixSwarm Deployment with Phoenix Cockpit](https://img.youtube.com/vi/hwQagK71TJc/maxresdefault.jpg)](https://www.youtube.com/watch?v=hwQagK71TJc)
+note: this is the old cockpit design
 ---
 
 ## ⚡ Quick Start
@@ -109,7 +115,7 @@ Matrix auto-resolves the directive + key, decrypts in memory, and spawns the age
 
 ---
 
-## 🚀 Deploying a Swarm with Phoenix Cockpit
+## Deploying a Swarm with Phoenix Cockpit
 
 Follow these steps to go from template → directive → encrypted swarm boot.
 
@@ -171,7 +177,7 @@ Follow these steps to go from template → directive → encrypted swarm boot.
 ⚠️ **Important**: Secure the swarm key.
 
 ```bash
-chmod 600 boot_directives/<universe_name>/keys/<universe_name>.key
+  chmod 600 boot_directives/<universe_name>/keys/<universe_name>.key
 ```
 
 ### 7. Boot the Swarm
@@ -179,7 +185,7 @@ chmod 600 boot_directives/<universe_name>/keys/<universe_name>.key
 From the command line:
 
 ```bash
-matrixd boot --universe <universe_name>
+  matrixd boot --universe <universe_name>
 ```
 
 Matrix auto-resolves the directive + key, decrypts them in memory, and spawns the agents slice by slice.
@@ -236,10 +242,7 @@ For commercial use, contact: [swarm@matrixswarm.com](mailto:swarm@matrixswarm.co
 
 ### Authorship
 
-MatrixOS wasn’t auto-generated.
-It was co-created by Daniel F. MacDonald (vision, design, code) and ChatGPT (The General) (iteration, drafting, lore).
-
-Every agent, directive, and heartbeat came from collaboration.
+MatrixSwarm / Phoenix Cockpit © 2025 Daniel F. MacDonald & Contributors.
 
 ### Resources
 

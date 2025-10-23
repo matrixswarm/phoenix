@@ -4,9 +4,9 @@ import hashlib
 import uuid
 import base64
 from copy import deepcopy
-from PyQt5 import QtWidgets, QtCore
+from PyQt6 import QtWidgets, QtCore
 
-from PyQt5.QtWidgets import (
+from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QFileDialog, QMessageBox, QLineEdit
 )
 from pathlib import Path
@@ -19,14 +19,13 @@ from matrix_gui.core.event_bus import EventBus
 from matrix_gui.modules.directive.connection_assignment_dialog import ConnectionAssignmentDialog
 from matrix_gui.modules.directive.cert_set_dialog import CertSetDialog
 from matrix_gui.modules.net.connection_manager_dialog import ConnectionManagerDialog
-from matrix_gui.modules.directive.password_prompt_dialog import PasswordPromptDialog
 from matrix_gui.modules.directive.deployment.helper.mint_directive_for_deployment import mint_directive_for_deployment
 from matrix_gui.modules.directive.deployment.helper.mint_deployment_metadata import mint_deployment_metadata
 
 from matrix_gui.core.emit_gui_exception_log import emit_gui_exception_log
-from PyQt5.QtWidgets import QInputDialog
+from PyQt6.QtWidgets import QInputDialog
 from matrix_gui.modules.vault.crypto.cert_utils import set_hash_bang
-from PyQt5.QtWidgets import QListWidget, QPushButton, QTextEdit, QLabel
+from PyQt6.QtWidgets import QListWidget, QPushButton, QTextEdit, QLabel
 from matrix_gui.modules.vault.crypto.deploy_tools import write_encrypted_bundle_to_file
 from matrix_gui.util.resolve_matrixswarm_base import resolve_matrixswarm_base
 from matrix_gui.modules.directive.deployment.wrapper import agent_aggregator_wrapper, agent_connection_wrapper, agent_cert_wrapper, agent_directive_wrapper , agent_signing_cert_wrapper
@@ -164,7 +163,7 @@ class DirectiveManagerDialog(QDialog):
 
         text = QTextEdit()
         text.setReadOnly(True)
-        text.setLineWrapMode(QTextEdit.NoWrap)  # 🔑 don’t wrap long keys
+        text.setLineWrapMode(QTextEdit.LineWrapMode.NoWrap)  # 🔑 don’t wrap long keys
         text.setPlainText(swarm_key)
         text.setMinimumWidth(600)  # widen the box
         text.setMinimumHeight(120)  # add some vertical space
@@ -179,7 +178,7 @@ class DirectiveManagerDialog(QDialog):
         layout.addWidget(btn_close)
 
         dlg.resize(800, 200)  # sensible default
-        dlg.exec_()
+        dlg.exec()
 
 
     def dump_vault(self):
@@ -239,7 +238,7 @@ class DirectiveManagerDialog(QDialog):
             QMessageBox.warning(self, "No Certs", "No cert set found for this deployment.")
             return
         dlg = CertSetDialog(cert_profile, self)
-        dlg.exec_()
+        dlg.exec()
 
     def delete_deployed(self):
         item = self.deployed_list_widget.currentItem()
@@ -255,8 +254,8 @@ class DirectiveManagerDialog(QDialog):
 
         resp = QMessageBox.question(self, "Delete Deployment",
                                     f"Are you sure you want to delete {dep_id}?",
-                                    QMessageBox.Yes | QMessageBox.No)
-        if resp != QMessageBox.Yes:
+                                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+        if resp != QMessageBox.StandardButton.Yes:
             return
 
         deps.pop(dep_id, None)
@@ -295,35 +294,40 @@ class DirectiveManagerDialog(QDialog):
             self.deployed_list_widget.addItem(f"{key} :: {val.get('label', key)}")
 
     def delete_saved_directive(self):
-        selected_item = self.saved_list_widget.currentItem()
-        if not selected_item:
-            QMessageBox.warning(self, "No Selection", "Select a saved directive to delete.")
-            return
 
-        entry = selected_item.text()
-        directive_id = entry.split("::")[0].strip()
-        if not directive_id.startswith("directive_"):
-            QMessageBox.warning(self, "Invalid Selection", "Directive ID not found.")
-            return
+        try:
+            selected_item = self.saved_list_widget.currentItem()
+            if not selected_item:
+                QMessageBox.warning(self, "No Selection", "Select a saved directive to delete.")
+                return
 
-        resp = QMessageBox.question(
-            self, "Delete Directive",
-            f"Are you sure you want to delete {directive_id}? This cannot be undone.",
-            QMessageBox.Yes | QMessageBox.No
-        )
-        if resp != QMessageBox.Yes:
-            return
+            entry = selected_item.text()
+            directive_id = entry.split("::")[0].strip()
+            if not directive_id.startswith("directive_"):
+                QMessageBox.warning(self, "Invalid Selection", "Directive ID not found.")
+                return
 
-        if directive_id in self.directives:
-            del self.directives[directive_id]
-            EventBus.emit(
-                "vault.update",
-                vault_path=self.vault_path,
-                password=self.password,
-                data=self.vault_data
+            resp = QMessageBox.question(
+                self, "Delete Directive",
+                f"Are you sure you want to delete {directive_id}? This cannot be undone.",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
             )
-            self.refresh_lists()
-            QMessageBox.information(self, "Directive Deleted", f"Directive {directive_id} deleted.")
+            if resp != QMessageBox.StandardButton.Yes:
+                return
+
+            if directive_id in self.directives:
+                del self.directives[directive_id]
+                EventBus.emit(
+                    "vault.update",
+                    vault_path=self.vault_path,
+                    password=self.password,
+                    data=self.vault_data
+                )
+                self.refresh_lists()
+                QMessageBox.information(self, "Directive Deleted", f"Directive {directive_id} deleted.")
+
+        except Exception as e:
+            emit_gui_exception_log("DirectiveManagerDialog.delete_saved_directive", e)
 
     def load_selected(self):
         item = self.saved_list_widget.currentItem()
@@ -393,13 +397,13 @@ class DirectiveManagerDialog(QDialog):
 
     def _open_connection_manager(self):
         dlg = ConnectionManagerDialog(self.vault_data, self)
-        dlg.exec_()
+        dlg.exec()
         # self.refresh_deployments()
         self.vault_updated.emit(self.vault_data)
 
     def preview_deployment(self, directive_copy):
         import json
-        from PyQt5.QtWidgets import QDialog, QVBoxLayout, QTextEdit, QPushButton
+        from PyQt6.QtWidgets import QDialog, QVBoxLayout, QTextEdit, QPushButton
 
         dlg = QDialog(self)
         dlg.setWindowTitle("Preview Deployment")
@@ -416,7 +420,7 @@ class DirectiveManagerDialog(QDialog):
         btn_close.clicked.connect(dlg.close)
         layout.addWidget(btn_close)
 
-        dlg.exec_()
+        dlg.exec()
 
     def deploy_directive(self):
 
@@ -458,7 +462,7 @@ class DirectiveManagerDialog(QDialog):
             wrapped_agents = agent_connection_wrapper(agent_aggregator)
 
             conn_dlg = ConnectionAssignmentDialog(self, wrapped_agents, conn_mgr)
-            if conn_dlg.exec_() == conn_dlg.Accepted:
+            if conn_dlg.exec() == QDialog.DialogCode.Accepted:
                 conn_dlg.apply_assignments()
             else:
                 QMessageBox.warning(self, "No Assignments", "Connection assignments required.")
@@ -479,7 +483,7 @@ class DirectiveManagerDialog(QDialog):
 
             # step 6. Options Dialog (Clown Car, Hashbang)
             opts_dialog = DeployOptionsDialog(self)
-            if opts_dialog.exec_() != QDialog.Accepted:
+            if opts_dialog.exec() != QDialog.DialogCode.Accepted:
                 QMessageBox.information(self, "Cancelled", "Deployment process cancelled by operator.")
                 return
             opts = opts_dialog.get_options()
@@ -492,7 +496,7 @@ class DirectiveManagerDialog(QDialog):
 
             # step 8. Preview the newly minted directive (only once)
             staging_dialog = EncryptionStagingDialog(json.dumps(directive_staging, indent=2), self)
-            if staging_dialog.exec_() != QDialog.Accepted:
+            if staging_dialog.exec() != QDialog.DialogCode.Accepted:
                 QMessageBox.information(self, "Cancelled", "Directive encryption cancelled by operator.")
                 return
 
@@ -565,7 +569,7 @@ class DirectiveManagerDialog(QDialog):
 
             Matrix will automatically resolve the encrypted directive and swarm key.
             """
-            DeploymentDialog(deploy_cmd, self).exec_()
+            DeploymentDialog(deploy_cmd, self).exec()
 
         except Exception as e:
             print(f"Failed directive creation: {e}")

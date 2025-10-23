@@ -1,11 +1,11 @@
 from __future__ import annotations
 import socket
 from typing import Dict, Any
-from PyQt5.QtWidgets import QTabWidget
-from PyQt5.QtCore import Qt, QTimer
+from PyQt6.QtWidgets import QTabWidget
+from PyQt6.QtCore import Qt, QTimer
 from matrix_gui.core.event_bus import EventBus
 from matrix_gui.config.boot.globals import get_sessions
-from PyQt5.QtWidgets import (
+from PyQt6.QtWidgets import (
     QWidget, QSplitter,  QVBoxLayout, QHBoxLayout,
     QGroupBox, QSizePolicy, QLabel, QPushButton, QApplication
 )

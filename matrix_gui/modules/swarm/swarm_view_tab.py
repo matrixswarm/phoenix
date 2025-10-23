@@ -1,5 +1,5 @@
 # modules/swarm/swarm_view_tab.py
-from PyQt5.QtWidgets import QWidget, QVBoxLayout, QLabel, QPushButton, QTextEdit, QLineEdit
+from PyQt6.QtWidgets import QWidget, QVBoxLayout, QLabel, QPushButton, QTextEdit, QLineEdit
 from matrix_gui.core.event_bus import EventBus
 #from phoenix.state import SwarmState
 

@@ -1,4 +1,5 @@
-from PyQt5.QtWidgets import QDialog, QLabel, QComboBox, QPushButton, QVBoxLayout, QHBoxLayout
+from PyQt6.QtWidgets import QLabel, QComboBox, QPushButton, QVBoxLayout, QHBoxLayout, QDialog
+
 from matrix_gui.modules.directive.maps.base import CERT_INJECTION_MAP
 
 

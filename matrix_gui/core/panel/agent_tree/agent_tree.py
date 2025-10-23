@@ -1,12 +1,12 @@
 # Authored by Daniel F MacDonald and ChatGPT 5 aka The Generals
 import uuid, time, hashlib, json, datetime
-from PyQt5.QtWidgets import QWidget, QVBoxLayout, QSizePolicy, QHeaderView, QTreeWidget, QTreeWidgetItem, QLabel
+from PyQt6.QtWidgets import QWidget, QVBoxLayout, QSizePolicy, QHeaderView, QTreeWidget, QTreeWidgetItem, QLabel
 from matrix_gui.core.dialog.restart_agent_dialog import RestartAgentDialog
 from matrix_gui.core.dialog.delete_agent_dialog import DeleteAgentDialog
 from matrix_gui.core.emit_gui_exception_log import emit_gui_exception_log
 from matrix_gui.core.class_lib.packet_delivery.packet.standard.command.packet import Packet
-from PyQt5.QtCore import Qt, QTimer
-from PyQt5.QtWidgets import QMenu
+from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtWidgets import QMenu
 
 class PhoenixAgentTree(QWidget):
     def __init__(self, session_id, vault_data=None, bus=None, conn=None, deployment=None, parent=None):
@@ -40,23 +40,25 @@ class PhoenixAgentTree(QWidget):
             self.tree = QTreeWidget()
             self.tree.setColumnCount(1)
             self.tree.setHeaderHidden(True)
-            self.tree.header().setSectionResizeMode(QHeaderView.ResizeToContents)
-            self.tree.setSelectionMode(QTreeWidget.SingleSelection)
+            self.tree.header().setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
+            self.tree.setSelectionMode(QTreeWidget.SelectionMode.SingleSelection)
             self.tree.itemClicked.connect(self._on_tree_item_clicked)
 
             #context menu, right click, popup
-            self.tree.setContextMenuPolicy(Qt.CustomContextMenu)
+            self.tree.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
             self.tree.customContextMenuRequested.connect(self._on_context_menu)
             self.tree.setContentsMargins(0, 0, 0, 0)
 
             layout.addWidget(self.tree)
+
+            self._rendered_tree_root={} #holds udated agent tree
 
             # === Agent detail panel
 
             layout.setStretch(0, 0)  # status label
             layout.setStretch(1, 3)  # tree
 
-            self.tree.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
+            self.tree.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding)
 
             self.tree.setMinimumHeight(180)
 
@@ -70,6 +72,9 @@ class PhoenixAgentTree(QWidget):
 
         except Exception as e:
             emit_gui_exception_log("PhoenixAgentTree.__init__", e)
+
+    def get_rendered_tree(self):
+        return self._rendered_tree_root
 
     def _on_tree_item_clicked(self, item):
         try:
@@ -115,10 +120,14 @@ class PhoenixAgentTree(QWidget):
             content = payload.get("content", {})
             new_hash = self._compute_payload_hash(content)
 
+
             if new_hash == self._last_payload_hash:
                 self._last_tree_update_ts = time.time()
                 self._update_status_label()
                 return
+
+            if isinstance(content, dict):
+                self._rendered_tree_root = content
 
             self._last_payload_hash = new_hash
             self._last_tree_update_ts = time.time()
@@ -230,7 +239,7 @@ class PhoenixAgentTree(QWidget):
     def _build_node(self, parent_item, node):
         name, health = self._format_display(node)
         item = QTreeWidgetItem([name, health])
-        item.setData(0, Qt.UserRole, node)
+        item.setData(0, Qt.ItemDataRole.UserRole, node)
         parent_item.addChild(item)
 
         for child in node.get("children", []):
@@ -270,29 +279,19 @@ class PhoenixAgentTree(QWidget):
             return
 
         menu = QMenu(self)
-
-        #context menu, right click, to delete agent
         act_delete = menu.addAction(f"☠ Delete {uid}")
-        act_delete.triggered.connect(lambda: self._launch_delete_dialog(uid))
+        act_delete.triggered.connect(lambda: self.parent._launch_delete_agent(uid))
 
-        # context menu, right click, to start agent
         act_restart = menu.addAction(f"🔁 Restart {uid}")
-        act_restart.triggered.connect(lambda: self._launch_restart_dialog(uid))
+        act_restart.triggered.connect(lambda: self.parent._launch_restart_agent(uid))
 
-        menu.exec_(self.tree.viewport().mapToGlobal(pos))
+        act_hotswap = menu.addAction(f"🔥 Hotswap {uid}")
+        act_hotswap.triggered.connect(lambda: self.parent._launch_hotswap_agent_modal(uid))
 
-    def _launch_restart_dialog(self, uid):
+        act_inject = menu.addAction(f"🧬 Inject under {uid}")
+        act_inject.triggered.connect(lambda: self.parent._launch_inject_agent_modal(uid))
 
-        dlg = RestartAgentDialog(session_id=self.session_id, bus=self.bus, conn=self.conn, deployment=self.deployment, parent=self)
-        dlg.prefill_uid(uid)
-        dlg.exec_()
+        menu.exec(self.tree.viewport().mapToGlobal(pos))
 
-    def _launch_delete_dialog(self, uid):
 
-        dlg = DeleteAgentDialog(session_id=self.session_id,
-                                bus=self.bus,
-                                conn=self.conn,
-                                deployment = self.deployment,
-                                parent=self)
-        dlg.prefill_uid(uid)
-        dlg.exec_()
+

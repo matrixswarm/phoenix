@@ -1,6 +1,7 @@
 import uuid
 import ipaddress
-from PyQt5 import QtWidgets
+from PyQt6 import QtWidgets
+from PyQt6.QtWidgets import QDialog
 
 def edit_connection_dialog(parent, default_proto="https", data=None, conn_id=None):
     dlg = QtWidgets.QDialog(parent)
@@ -74,24 +75,34 @@ def edit_connection_dialog(parent, default_proto="https", data=None, conn_id=Non
             add_field("webhook_url")
             add_field("note")
 
+        channel_roles = {
+            "https": ["outgoing.command"],
+            "wss": ["payload.reception"],
+            "discord": ["alerts"],
+            "telegram": ["alerts"],
+            "openai": ["oracle"],
+            "email": ["alerts"],
+            "slack": ["alerts"]
+        }
+
         # Default channel role dropdown
         channel_box = QtWidgets.QComboBox()
         if p == "https":
-            channel_box.addItems(["outgoing.command"])
+            channel_box.addItems(channel_roles.get(p, ["outgoing.command"]))
         elif p == "wss":
-            channel_box.addItems(["payload.reception"])
+            channel_box.addItems(channel_roles.get(p, ["payload.reception"]))
         elif p == "discord":
-            channel_box.addItems(["alerts"])
+            channel_box.addItems(channel_roles.get(p, ["alerts"]))
         elif p == "telegram":
-            channel_box.addItems(["alerts"])
+            channel_box.addItems(channel_roles.get(p, ["alerts"]))
         elif p == "openai":
-            channel_box.addItems(["oracle"])
+            channel_box.addItems(channel_roles.get(p, ["alerts"]))
         elif p == "email":
-            channel_box.addItems(["alerts"])
+            channel_box.addItems(channel_roles.get(p, ["alerts"]))
         elif p == "slack":
-            channel_box.addItems(["alerts"])
+            channel_box.addItems(channel_roles.get(p, ["alerts"]))
         else:
-            channel_box.addItems(["outgoing.command"])
+            channel_box.addItems(channel_roles.get(p, ["outgoing.command"]))
 
         prev_default = (data or {}).get("default_channel")
         if prev_default:
@@ -170,21 +181,23 @@ def edit_connection_dialog(parent, default_proto="https", data=None, conn_id=Non
 
     def on_accept():
         out = validate_and_return()
-        if out is not None:
-            new_id, result = out
-            dlg._return_id = new_id
-            dlg._return_data = result
-            dlg.accept()
+        if not out or out == (None, None):
+            return  # stop on validation failure
+        new_id, result = out
+        dlg._return_id = new_id
+        dlg._return_data = result
+        dlg.accept()
 
     type_selector.currentTextChanged.connect(update_fields_for_type)
     update_fields_for_type()
-
-    btns = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel)
+    btns = QtWidgets.QDialogButtonBox(
+        QtWidgets.QDialogButtonBox.StandardButton.Ok | QtWidgets.QDialogButtonBox.StandardButton.Cancel
+    )
     layout.addRow(btns)
     btns.accepted.connect(on_accept)
     btns.rejected.connect(dlg.reject)
 
-    if dlg.exec_() != QtWidgets.QDialog.Accepted:
+    if dlg.exec() != QDialog.DialogCode.Accepted:
         return None, None
 
     return dlg._return_id, dlg._return_data
