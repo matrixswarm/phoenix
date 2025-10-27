@@ -6,8 +6,6 @@ from matrix_gui.core.class_lib.packet_delivery.packet.standard.command.packet im
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtWidgets import QMenu
 from collections import deque
-from threading import RLock
-
 
 class PhoenixAgentTree(QWidget):
     def __init__(self, session_id, vault_data=None, bus=None, conn=None, deployment=None, parent=None):
@@ -20,12 +18,6 @@ class PhoenixAgentTree(QWidget):
             self.session_id = session_id
             self.parent = parent  # optional
             self.active_log_token = None  # can be used locally or emitted via signal
-            self._update_queue = deque(maxlen=10)
-            self._update_timer = QTimer(self)
-            self._update_timer.timeout.connect(self._process_queue)
-            self._update_timer.start(200)  # check every 200ms
-            self._render_lock = RLock()
-            self._updating = False
 
             # === Layout
             layout = QVBoxLayout()
@@ -38,7 +30,6 @@ class PhoenixAgentTree(QWidget):
             self.status_label.setObjectName("status")  # use same QSS rule as log status
             layout.addWidget(self.status_label)
 
-            self._last_payload_hash = None
             self._last_tree_update_ts = None
 
             self.flip_tripping_threshold = 1
@@ -50,6 +41,11 @@ class PhoenixAgentTree(QWidget):
             self.tree.header().setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
             self.tree.setSelectionMode(QTreeWidget.SelectionMode.SingleSelection)
             self.tree.itemClicked.connect(self._on_tree_item_clicked)
+
+            #queue the return tree results
+            self._update_queue = deque(maxlen=5)
+            self._render_pending = False
+
 
             #context menu, right click, popup
             self.tree.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
@@ -69,7 +65,6 @@ class PhoenixAgentTree(QWidget):
 
             self.tree.setMinimumHeight(180)
 
-
             # === Bind to session bus updates
             if self.bus:
                 self.bus.on(
@@ -85,82 +80,83 @@ class PhoenixAgentTree(QWidget):
         return self._rendered_tree_root
 
     def _on_tree_item_clicked(self, item):
-
-        if self._updating:
-            print("[TREE] ⚠️ Click ignored during update window.")
-            return
-
         try:
+            node = item.data(0, Qt.ItemDataRole.UserRole)
+            if not isinstance(node, dict):
+                return
 
-            with self._render_lock:
+            uid = node.get("universal_id")
+            if not uid or not self.bus:
+                return
 
-                node = item.data(0, Qt.ItemDataRole.UserRole)
-                if not isinstance(node, dict):
-                    return
+            token = str(uuid.uuid4())
+            self.active_log_token = token
+            #self.detail_panel.set_agent_data(node)
 
-                uid = node.get("universal_id")
-                if not uid or not self.bus:
-                    return
-
-                token = str(uuid.uuid4())
-                self.active_log_token = token
-                #self.detail_panel.set_agent_data(node)
-
-                pk = Packet()
-                pk.set_data({
-                    "handler": "cmd_service_request",
-                    "ts": time.time(),
-                    "content": {
-                        "service": "hive.log_streamer",
-                        "payload": {
-                            "target_agent": uid,
-                            "session_id": self.session_id,
-                            "token": token,
-                            "follow": True,
-                            "return_handler": "agent_log_view.update"
-                        }
+            pk = Packet()
+            pk.set_data({
+                "handler": "cmd_service_request",
+                "ts": time.time(),
+                "content": {
+                    "service": "hive.log_streamer",
+                    "payload": {
+                        "target_agent": uid,
+                        "session_id": self.session_id,
+                        "token": token,
+                        "follow": True,
+                        "return_handler": "agent_log_view.update"
                     }
-                })
+                }
+            })
 
-                ui_cfg = node.get("config", {}).get("ui", {})
-                panels = ui_cfg.get("panel", [])
+            ui_cfg = node.get("config", {}).get("ui", {})
+            panels = ui_cfg.get("panel", [])
 
-                self.bus.emit("gui.agent.selected", session_id=self.session_id, node=node, panels=panels)
-                self.bus.emit("gui.log.token.updated", session_id=self.session_id, token=token, agent_title=node.get("name", uid))
-                self.bus.emit("outbound.message", session_id=self.session_id, channel="outgoing.command", packet=pk)
+            self.bus.emit("gui.agent.selected", session_id=self.session_id, node=node, panels=panels)
+            self.bus.emit("gui.log.token.updated", session_id=self.session_id, token=token, agent_title=node.get("name", uid))
+            self.bus.emit("outbound.message", session_id=self.session_id, channel="outgoing.command", packet=pk)
 
-                print(f"[AGENT_TREE] 🔍 Sent fetch_logs for agent {uid} with token={token}")
+            print(f"[AGENT_TREE] 🔍 Sent fetch_logs for agent {uid} with token={token}")
 
         except Exception as e:
             emit_gui_exception_log("PhoenixAgentTree._on_tree_item_clicked", e)
 
-    def _process_queue(self):
-        if not self._update_queue:
-            return
-        payload = self._update_queue.pop()  # take latest, discard older
-        try:
-            self._render_tree(payload.get("content", {}))
-            self._update_status_label()
-            QTimer.singleShot(0, self.tree.expandAll)
-        except Exception as e:
-            emit_gui_exception_log("PhoenixAgentTree._process_queue", e)
-
     def _handle_tree_update(self, payload, **_):
+        try:
+            if self._render_pending:
+                return
+            self._update_queue.clear()
+            self._update_queue.append(payload)
+
+            # always execute inside GUI thread
+            QTimer.singleShot(100, self._process_next_update)
+        except Exception as e:
+            emit_gui_exception_log("PhoenixAgentTree._handle_tree_update", e)
+
+    def _process_next_update(self):
+
+        if self._render_pending or not self._update_queue:
+            return
+        self._render_pending = True
+        content = self._update_queue.pop()
+        self._update_queue.clear()
+        QTimer.singleShot(0, lambda: self._render_safe(content))
+
+    def _render_safe(self, content):
 
         try:
-            self._update_queue.append(payload)
-            content = payload.get("content", {})
-            new_hash = self._compute_payload_hash(content)
+            self._render_tree_safe(content)
+        finally:
+            self._render_pending = False
 
-            if new_hash == self._last_payload_hash:
-                self._last_tree_update_ts = time.time()
-                self._update_status_label()
-                return
+    def _render_tree_safe(self, payload, **_):
+        try:
+
+            content = payload.get("content", {})
 
             if isinstance(content, dict):
                 self._rendered_tree_root = content
 
-            self._last_payload_hash = new_hash
             self._last_tree_update_ts = time.time()
             self._render_tree(content)
             self._update_status_label()
@@ -179,22 +175,8 @@ class PhoenixAgentTree(QWidget):
             emit_gui_exception_log("PhoenixAgentTree._update_status_label", e)
 
     def _render_tree(self, tree_data):
-
-        if self._updating:
-            return  # skip if already mid-update
         try:
-            self._updating = True
-            # remember which node is currently selected
-            selected = None
-            current = self.tree.currentItem()
-            if current and hasattr(current, "node_data"):
-                selected = current.node_data.get("universal_id")
-
-            with self._render_lock:
-                self.tree.blockSignals(True)
-                self.tree.setUpdatesEnabled(False)
-                self.tree.clear()
-
+            self.tree.clear()
 
             def build(parent, node):
                 if not isinstance(node, dict):
@@ -264,39 +246,9 @@ class PhoenixAgentTree(QWidget):
 
 
             build(None, tree_data)
-            if selected:
-                self._reselect_by_uid(selected)
 
         except Exception as e:
             emit_gui_exception_log("PhoenixAgentTree._render_tree", e)
-
-        finally:
-            self.tree.setUpdatesEnabled(True)
-            self.tree.blockSignals(False)
-            self._updating = False
-
-    def _reselect_by_uid(self, uid):
-        self.tree.setFocus(Qt.FocusReason.OtherFocusReason)
-        def recurse(parent):
-            for i in range(parent.childCount()):
-                item = parent.child(i)
-                if getattr(item, "node_data", {}).get("universal_id") == uid:
-                    self.tree.setCurrentItem(item)
-                    self.tree.scrollToItem(item)
-                    return True
-                if recurse(item):
-                    return True
-            return False
-
-        # search from top level
-        for i in range(self.tree.topLevelItemCount()):
-            top = self.tree.topLevelItem(i)
-            if getattr(top, "node_data", {}).get("universal_id") == uid:
-                self.tree.setCurrentItem(top)
-                self.tree.scrollToItem(top)
-                return
-            if recurse(top):
-                return
 
     def closeEvent(self, event):
         try:
