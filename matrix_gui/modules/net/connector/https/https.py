@@ -131,12 +131,7 @@ class HTTPSConnector(BaseConnector):
             https_conn.close()
             tls_sock.close()
             raw_sock.close()
-            try:
-                os.remove(cert_path)
-                os.remove(key_path)
-                print(f"[CERT_LOADER] 🧹 Cleaned up {cert_path}, {key_path}")
-            except Exception as e:
-                print(f"[CERT_LOADER][WARN] Failed cleanup: {e}")
+
             self._set_status("connected")
 
         except Exception as e:

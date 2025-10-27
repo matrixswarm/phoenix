@@ -110,6 +110,7 @@ class LogWatcher(PhoenixPanelInterface):
             collectors = [name for name, cb in self.collector_checkboxes.items() if cb.isChecked()]
             use_oracle = self.oracle_cb.isChecked()
             token = str(uuid.uuid4())
+            self._last_token = token
 
             pk = Packet()
             pk.set_data({
@@ -134,7 +135,6 @@ class LogWatcher(PhoenixPanelInterface):
                 packet=pk
             )
 
-            self._last_token = token
             oracle_text = " 🧠 (Oracle enabled)" if use_oracle else ""
             self.output_box.append(f"🛰 Request sent for collectors: {', '.join(collectors)}{oracle_text}\n")
 

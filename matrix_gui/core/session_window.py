@@ -619,19 +619,20 @@ class SessionWindow(QMainWindow):
             emit_gui_exception_log("SessionWindow.handle_deployment_update", e)
 
     def closeEvent(self, event):
-        print(f"[SESSION] {self.session_id} closing, destroying session")
+        print(f"[SESSION] {self.cockpit_id} closing, destroying session")
         try:
             if self.conn:
                 try:
                     self.conn.send({
                         "type": "exit",
-                        "session_id": self.session_id
+                        "session_id": self.cockpit_id
                     })
                 except (BrokenPipeError, OSError):
                     print("[SESSION][EXIT] Pipe already closed – skipping exit signal.")
                 finally:
                     self.conn.close()
             deployment_connector.destroy_session(self.session_id)
+
         except Exception as e:
             emit_gui_exception_log("SessionWindow.closeEvent.destroy_session", e)
         super().closeEvent(event)

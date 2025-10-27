@@ -99,9 +99,7 @@ def establish_ws_connection(host, port, agent, deployment, session_id, timeout=5
         print(f"[WSSConnector][{agent.get('universal_id')}] connect error: {e}")
 
     finally:
-        for p in [cert_path, key_path]:
-            if p and os.path.exists(p):
-                os.remove(p)
+        pass
 
 
 class WSSConnector(BaseConnector):
