@@ -103,14 +103,12 @@ class LogWatcher(PhoenixPanelInterface):
 
     def _on_generate_clicked(self):
         try:
-            self._last_token = None
             self._pending_lines.clear()
             self.output_box.clear()
 
             collectors = [name for name, cb in self.collector_checkboxes.items() if cb.isChecked()]
             use_oracle = self.oracle_cb.isChecked()
-            token = str(uuid.uuid4())
-            self._last_token = token
+            self._last_token = str(uuid.uuid4())
 
             pk = Packet()
             pk.set_data({
@@ -122,7 +120,7 @@ class LogWatcher(PhoenixPanelInterface):
                         "collectors": collectors,
                         "use_oracle": use_oracle,
                         "session_id": self.session_id,
-                        "token": token,
+                        "token": self._last_token,
                         "return_handler": "logwatch_panel.update"
                     }
                 }
@@ -142,13 +140,12 @@ class LogWatcher(PhoenixPanelInterface):
             emit_gui_exception_log("LogWatcherPanel._on_generate_clicked", e)
 
     def showEvent(self, ev):
-
+        self._last_token = None  # clear stale digest
         QTimer.singleShot(250, self._connect_signals)
         super().showEvent(ev)
 
     def hideEvent(self, ev):
-        self._disconnect_signals()
-        super().hideEvent(ev)
+        pass  # leave signals connected
 
     def closeEvent(self, ev):
         self._disconnect_signals()

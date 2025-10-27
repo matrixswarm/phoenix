@@ -22,25 +22,8 @@ def write_temp_pem(data: str, suffix=".pem"):
         f.write(data)
     return path
 
-def start_keepalive(ws, session_id):
-    def _ping():
-        while True:
-            try:
-                ws.ping("matrix-alive")   # send heartbeat only
-                print("[WSSConnector] 🔄 Sent ping to server")
-                time.sleep(20)
-            except Exception as e:
-                print(f"[WSSConnector] 🚨 Ping failed: {e}")
-                try:
-                    ws.close()
-                except Exception as inner_e:
-                    print(f"[WSSConnector] ⚠️ Error closing socket: {inner_e}")
-                break
-    threading.Thread(target=_ping, daemon=True).start()
-
-
-
 def establish_ws_connection(host, port, agent, deployment, session_id, timeout=5):
+
     cert_adapter = AgentCertWrapper(agent, deployment)
 
     # Write cert + key to temp files (Windows safe)
@@ -65,8 +48,6 @@ def establish_ws_connection(host, port, agent, deployment, session_id, timeout=5
             }
         )
 
-        ws.settimeout(None)  # block forever for reads
-
         # SPKI pin verification
         peer_cert = ws.sock.getpeercert(binary_form=True)
         ok, actual_pin = verify_spki_pin(peer_cert, cert_adapter.server_spki_pin)
@@ -74,8 +55,6 @@ def establish_ws_connection(host, port, agent, deployment, session_id, timeout=5
         if not ok:
             ws.close()
             raise ConnectionError(f"SPKI mismatch: expected {cert_adapter.server_spki_pin}, got {actual_pin}")
-
-        ws.settimeout(None)
 
         # Build hello
         hello = {
@@ -87,220 +66,145 @@ def establish_ws_connection(host, port, agent, deployment, session_id, timeout=5
 
         # Load signing key from deployment if present
         priv_pem = deployment.get("certs", {}).get(agent.get("universal_id"), {}).get("signing", {}).get("remote_privkey")
+
+
         if priv_pem:
             priv_key = RSA.import_key(priv_pem.encode())
             hello["sig"] = crypto_utils.sign_data(hello, priv_key)
 
         ws.send(json.dumps(hello))
-        start_keepalive(ws, session_id)
+        ws.settimeout(None)
         return ws
 
     except Exception as e:
         print(f"[WSSConnector][{agent.get('universal_id')}] connect error: {e}")
 
-    finally:
-        pass
 
+    finally:
+        for p in [cert_path, key_path]:
+            if p and os.path.exists(p):
+                os.remove(p)
 
 class WSSConnector(BaseConnector):
-    def __call__(self, host, port, agent, deployment, session_id, timeout=10):
-
-        #print(f"[DEBUG] {agent.get('universal_id')} attaching to session {session_id}")
-        try:
-            channel_name = f"{agent.get('universal_id')}-{session_id[:8]}-{uuid.uuid4().hex[:6]}-wss"
-            self._running[session_id] = True
-            thread = threading.Thread(
-                target=self._run_connector_loop,
-                args=(host, port, agent, deployment, session_id, channel_name),
-                daemon=True,
-                name=f"{agent.get('universal_id')}-wss"
-            )
-            thread.start()
-        except Exception as e:
-            emit_gui_exception_log("wss.__call__", e)
-
-
     def __init__(self, running=True):
+        self._running = {}
+        self._socket_map = {}  # sid → ws
+        ConnectorBus.get("global").on("session.closed", self._on_session_closed)
 
-        try:
-            self._running = {}
-            ConnectorBus.get("global").on("session.closed", self._on_session_closed)
-        except Exception as e:
-            emit_gui_exception_log("wss.__init__", e)
+    def __call__(self, host, port, agent, deployment, session_id, timeout=10):
+        name = f"{agent.get('universal_id')}-wss"
+        if self._running.get(session_id):
+            print(f"[WSSConnector] session {session_id} already running")
+            return
+        self._running[session_id] = True
+        t = threading.Thread(
+            target=self._connector_loop,
+            args=(host, port, agent, deployment, session_id, name),
+            daemon=True,
+            name=name,
+        )
+        t.start()
 
-    def send(self, packet: Packet, timeout=10):
-        print('send is not  implemented')
-        pass
+    def _connector_loop(self, host, port, agent, deployment, sid, ch_name):
+        ctx = get_sessions().get(sid)
+        if not ctx:
+            return
 
-    # === Inside Agent class ===
-    async def ping_keepalive(self, ws, sid):
-        """
-        Sends periodic pings to the client and waits for a pong.
-        Logs failures and triggers disconnect if pong isn't received.
-        """
-        try:
-            while sid in self._sessions:
-                try:
-                    pong_waiter = await ws.ping("matrix-ping")
-                    await asyncio.wait_for(pong_waiter, timeout=5)
-                    self.log(f"[WS][PONG] ✅ Pong received from session {sid}")
-                except asyncio.TimeoutError:
-                    self.log(f"[WS][PONG TIMEOUT] ❌ No pong from session {sid} — closing socket")
-                    await ws.close(reason="pong timeout")
-                    break
-                except Exception as e:
-                    self.log(f"[WS][PING ERROR] {e}")
-                    await ws.close(reason="ping error")
-                    break
-                await asyncio.sleep(10)
-        except Exception as outer_e:
-            self.log(f"[WS][KEEPALIVE] Fatal error in ping loop for session {sid}: {outer_e}")
+        backoff = 2
+        last_state = None
 
-    def _run_connector_loop(self, host, port, agent, deployment, session_id, channel_name):
-        try:
-            ctx = get_sessions().get(session_id)
-            self._set_channel_name(channel_name)
-            self._set_status("connecting")
-            if not ctx:
-                return
-
-        except Exception as e:
-            emit_gui_exception_log("wss._run_connector_loop", e)
-
-        while self._running.get(session_id, False):  # high-level reconnect loop
-            ws = None
+        while self._running.get(sid, False):
             try:
+                ws = establish_ws_connection(host, port, agent, deployment, sid, timeout=5)
+                if not ws:
+                    raise ConnectionError("connect failed")
 
-                ws = establish_ws_connection(host, port, agent, deployment, session_id, timeout=10)
+                self._socket_map[sid] = ws
+                if last_state != "connected":
+                    self._emit_status(sid, ch_name, "connected", host, port)
+                    last_state = "connected"
+                backoff = 2  # reset backoff
 
-                # Register channel
-                ctx.channels[channel_name] = ws
-                ctx.status[channel_name] = "connected"
-                self._set_status("connected")
-                ConnectorBus.get(session_id).emit(
-                    "channel.status",
-                    session_id=session_id,
-                    channel=channel_name,
-                    status="connected",
-                    info={"host": host, "port": port}
-                )
-
-                # recv loop
-                while self._running.get(session_id, False):
+                while self._running.get(sid, False):
                     try:
-                        message = ws.recv()
-
-                        if not message:
-                            raise ConnectionError("empty recv → disconnect")
-                        ConnectorBus.get(session_id).emit(
+                        msg = ws.recv()
+                        if not msg:
+                            raise ConnectionError("peer closed")
+                        ConnectorBus.get(sid).emit(
                             "inbound.raw",
-                            session_id=session_id,
-                            channel=channel_name,
+                            session_id=sid,
+                            channel=ch_name,
                             source=agent.get("universal_id"),
-                            payload=json.loads(message),
-                            ts=time.time()
+                            payload=json.loads(msg),
+                            ts=time.time(),
                         )
-
-                        print(f"[DEBUG][WSS] emitted inbound.raw for {session_id}")
-
+                    except socket.timeout:
+                        # nothing to read — stay connected quietly
+                        continue
+                    except TimeoutError:
+                        continue
+                    except (OSError, ConnectionError):
+                        break
                     except Exception as e:
-                        print(f"[WSSConnector][{agent['universal_id']}] recv error: {e}")
+                        # log once every few minutes, not per tick
+                        print(f"[WSSConnector][{agent['universal_id']}] recv error: {type(e).__name__}")
+                        time.sleep(1)
                         break
 
             except Exception as e:
-                print(f"[WSSConnector][{agent['universal_id']}] connect error: {e}")
+                if last_state != "disconnected":
+                    self._emit_status(sid, ch_name, "disconnected")
+                    last_state = "disconnected"
+                print(f"[WSSConnector][{agent.get('universal_id')}] {e}")
 
+            # graceful socket cleanup
+            try:
+                ws.close()
+            except Exception:
+                pass
 
-            finally:
+            if not self._running.get(sid, False):
+                break
 
-                # cleanup
-                ctx.status[channel_name] = "disconnected"
-                ctx.channels.pop(channel_name, None)
-                try:
-                    if ws:
-                        ws.close()
-                except Exception:
-                    pass
+            # stay quiet during downtime
+            time.sleep(backoff)
+            backoff = min(backoff * 2, 30)
 
-                try:
-                    if ws and ws.sock:
-                        ws.sock.shutdown(socket.SHUT_RDWR)
-                        ws.close(status=1000, reason="client shutdown")
-                except Exception as e:
-                    print(f"[WSSConnector] ⚠️ error hard-closing socket: {e}")
+        self._socket_map.pop(sid, None)
+        self._emit_status(sid, ch_name, "closed")
+        print(f"[WSSConnector] loop exit for {sid}")
 
-                ConnectorBus.get(session_id).emit(
-                    "channel.status",
-                    session_id=session_id,
-                    channel=channel_name,
-                    status="disconnected"
-                )
-                ctx.status[channel_name] = "disconnected"
-                self._set_status("disconnected")
+    # ---------------------
 
-                if not self._running.get(session_id, False) or not get_sessions().get(session_id):
-                    break  # don’t sleep/reconnect if closed
+    def _emit_status(self, sid, ch, status, host=None, port=None):
+        ConnectorBus.get(sid).emit(
+            "channel.status",
+            session_id=sid,
+            channel=ch,
+            status=status,
+            info={"host": host, "port": port} if host else {},
+        )
+        self._set_status(status)
 
-                time.sleep(5)
-
-        self._running.pop(session_id, None)
+    def send(self, packet: Packet, sid=None):
+        ws = self._socket_map.get(sid)
+        if not ws:
+            print(f"[WSSConnector] no socket for {sid}")
+            return
+        try:
+            ws.send(json.dumps(packet.get_packet()))
+        except Exception as e:
+            print(f"[WSSConnector] send fail: {e}")
 
     def close(self, session_id=None, channel_name=None):
-        """
-        Stop the WSS loop, close sockets, and clean up channel(s).
-        """
+        self._running[session_id] = False
+        ws = self._socket_map.pop(session_id, None)
         try:
-            if not session_id:
-                return
-
-            print(f"[WSSConnector] 🔴 Closing session {session_id}")
-            self._running[session_id] = False
-
-            ctx = get_sessions().get(session_id)
-            if not ctx:
-                return
-
-            # If a specific channel is given
-            if channel_name and channel_name in ctx.channels:
-                ws = ctx.channels.pop(channel_name, None)
-                ctx.status[channel_name] = "disconnected"
-                try:
-                    if ws:
-                        ws.close(status=1000, reason="manual close")
-                except Exception as e:
-                    print(f"[WSSConnector] ⚠ error closing {channel_name}: {e}")
-                ConnectorBus.get(session_id).emit(
-                    "channel.status",
-                    session_id=session_id,
-                    channel=channel_name,
-                    status="disconnected"
-                )
-                ctx.status[channel_name] = "disconnected"
-                self._set_status("disconnected")
-
-            # Otherwise nuke all WSS channels for this session
-            else:
-                for ch, ws in list(ctx.channels.items()):
-                    if ch.endswith("-wss"):
-                        try:
-                            if ws:
-                                ws.close(status=1000, reason="session close")
-                        except Exception:
-                            pass
-                        ctx.status[ch] = "disconnected"
-                        ConnectorBus.get(session_id).emit(
-                            "channel.status",
-                            session_id=session_id,
-                            channel=ch,
-                            status="disconnected"
-                        )
-                        ctx.channels.pop(ch, None)
-
-        except Exception as e:
-            emit_gui_exception_log("wss.close", e)
-
+            if ws:
+                ws.close()
+        except Exception:
+            pass
+        self._emit_status(session_id, channel_name or "wss", "closed")
 
     def _on_session_closed(self, session_id, **_):
-        # Delegate to close() so cleanup is unified
-        print(f"[WSSConnector] 🔴 session.closed received for {session_id}")
         self.close(session_id=session_id)
