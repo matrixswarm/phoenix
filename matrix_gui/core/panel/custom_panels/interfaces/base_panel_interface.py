@@ -31,6 +31,30 @@ class PhoenixPanelInterface(QWidget, metaclass=PanelABCMeta):
                 f"{self.__class__.__name__} missing required methods: {', '.join(missing)}"
             )
 
+    def showEvent(self, event):
+        try:
+            if hasattr(self, "_connect_signals"):
+                self._connect_signals()
+        except Exception as e:
+            print(f"[{self.__class__.__name__}] showEvent error: {e}")
+        super().showEvent(event)
+
+    def hideEvent(self, event):
+        try:
+            if hasattr(self, "_disconnect_signals"):
+                self._disconnect_signals()
+        except Exception as e:
+            print(f"[{self.__class__.__name__}] hideEvent error: {e}")
+        super().hideEvent(event)
+
+    def closeEvent(self, event):
+        try:
+            if hasattr(self, "_disconnect_signals"):
+                self._disconnect_signals()
+        except Exception as e:
+            print(f"[{self.__class__.__name__}] closeEvent error: {e}")
+        super().closeEvent(event)
+
     @abstractmethod
     def _connect_signals(self): ...
     @abstractmethod

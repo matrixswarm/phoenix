@@ -57,7 +57,7 @@ class Chat(PhoenixPanelInterface):
         self.input_field.clear()
 
     def _connect_signals(self):
-        scoped = f"inbound.verified.chat_blender_panel.update.{self.session_id}"
+        scoped = f"inbound.verified.chat_blender_panel.update"
         self.bus.on(scoped, self._handle_output)
 
     def _handle_output(self, session_id, channel, source, payload, **_):

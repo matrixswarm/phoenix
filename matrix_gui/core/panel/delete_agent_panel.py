@@ -6,8 +6,16 @@ from matrix_gui.core.dialog.delete_agent_dialog import DeleteAgentDialog
 from matrix_gui.core.emit_gui_exception_log import emit_gui_exception_log
 
 class DeleteAgentPanel(QObject):
-    """Launches a DeleteAgentDialog and handles confirmation + feed."""
+    """
+    Presenter object that wraps :class:`DeleteAgentDialog`.
 
+    Responsibilities
+    ----------------
+    • Ensures only one dialog is open at a time
+    • Emits *cmd_delete_agent* over the Matrix bus
+    • Listens for **delete_agent.confirm** to toast the UI and feed
+      the cockpit swarm-feed panel.
+    """
     def __init__(self, session_id, bus, conn, deployment, parent=None):
         super().__init__(parent)
         self.session_id = session_id
@@ -20,12 +28,20 @@ class DeleteAgentPanel(QObject):
 
         # Listen for confirmation from Matrix → Phoenix
         self.bus.on(
-            f"inbound.verified.delete_agent.confirm.{self.session_id}",
+            f"inbound.verified.delete_agent.confirm",
             self._handle_confirm
         )
 
     def launch(self, uid: str = None):
-        """Open the delete dialog window."""
+        """
+        Show the dialog, optionally pre-filling ``uid``.
+
+        Parameters
+        ----------
+        uid :
+            Universal-ID of the agent that should be highlighted when
+            the dialog appears.
+        """
         try:
 
             if not self.clear_to_show:
@@ -54,6 +70,11 @@ class DeleteAgentPanel(QObject):
         self.clear_to_show = True
 
     def _handle_confirm(self, session_id, channel, source, payload, ts):
+        """
+        Bus callback for **delete_agent.confirm**.
+
+        Converts the wire payload into a cockpit toast + swarm-feed event.
+        """
         try:
             content = payload.get("content", {})
             result = content.get("result", {})
@@ -97,6 +118,7 @@ class DeleteAgentPanel(QObject):
 
     def _cleanup(self):
         """Ensure dialog and signals are cleaned up."""
+        self.clear_to_show=True
         if self._dlg:
             self._dlg.deleteLater()
             self._dlg = None

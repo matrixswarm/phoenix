@@ -39,17 +39,22 @@ class Gameboard(PhoenixPanelInterface):
     def _connect_signals(self):
         if getattr(self, "_signals_connected", False):
             return
-        scoped_handler = f"inbound.verified.npc_simulator.gameboard.response.{self.session_id}"
+        scoped_handler = f"inbound.verified.npc_simulator.gameboard.response"
         self.bus.on(scoped_handler, self._handle_gameboard_response)
         self._signals_connected = True
         print(f"[GAMEBOARD] 🎧 Listening on {scoped_handler}")
 
     def _disconnect_signals(self):
-        if getattr(self, "_signals_connected", False):
-            scoped_handler = f"inbound.verified.npc_simulator.gameboard.response.{self.session_id}"
-            self.bus.off(scoped_handler, self._handle_gameboard_response)
+        try:
+            if not getattr(self, "_signals_connected", False):
+                return
+            scoped_handler = "inbound.verified.npc_simulator.gameboard.response"
+            if hasattr(self, "bus") and self.bus:
+                self.bus.off(scoped_handler, self._handle_gameboard_response)
             self._signals_connected = False
             print(f"[GAMEBOARD] ❌ Disconnected from {scoped_handler}")
+        except Exception as e:
+            print(f"[GAMEBOARD][WARN] disconnect failed: {e}")
 
     def get_panel_buttons(self):
         return [
@@ -329,7 +334,7 @@ class Gameboard(PhoenixPanelInterface):
     def _handle_gameboard_response(self, session_id, channel, source, payload, ts=None, **_):
         try:
             data = payload.get("content", {})
-            print(f"[GAMEBOARD] 📨 Session={session_id} Data={data}")
+            #print(f"[GAMEBOARD] 📨 Session={session_id} Data={data}")
 
             player_pos = data.get("player_pos", (0, 0))
             npc_list = data.get("npc_list", [])

@@ -1,7 +1,6 @@
-import uuid
+import os
 import ipaddress
 import base64, hashlib
-import time
 from cryptography.x509 import KeyUsage
 from cryptography.hazmat.primitives import serialization, hashes
 from cryptography.hazmat.primitives.asymmetric import rsa
@@ -11,9 +10,9 @@ from datetime import datetime, timedelta
 from matrix_gui.core.event_bus import EventBus
 from matrix_gui.modules.common.crypto.interfaces.cert_consumer import CertConsumer
 from matrix_gui.modules.common.crypto.interfaces.signing_cert_consumer import SigningCertConsumer
+from matrix_gui.modules.common.crypto.interfaces.symmetric_encryption_consumer import SymmetricEncryptionConsumer
 from cryptography.x509 import SubjectAlternativeName, DNSName, IPAddress
 from matrix_gui.core.emit_gui_exception_log import emit_gui_exception_log
-from cryptography.x509 import SubjectKeyIdentifier
 
 def spki_pin_from_pem(cert_pem: str) -> str:
     cert = x509.load_pem_x509_certificate(cert_pem.encode("utf-8"))
@@ -62,7 +61,7 @@ def _generate_self_signed_cert(key, common_name, sans=None):
     return cert.public_bytes(serialization.Encoding.PEM).decode()
 
 
-def _generate_root_ca(common_name: str, key_size: int = 2048):
+def _generate_root_ca(common_name: str, key_size: int = 4096):
     key = rsa.generate_private_key(
         public_exponent=65537,
         key_size=key_size
@@ -120,7 +119,7 @@ def _generate_signed_cert(common_name: str, sans: list, issuer_cert, issuer_key,
         .public_key(key.public_key())\
         .serial_number(x509.random_serial_number())\
         .not_valid_before(datetime.utcnow())\
-        .not_valid_after(datetime.utcnow() + timedelta(days=365)) \
+        .not_valid_after(datetime.utcnow() + timedelta(days=3650)) \
         .add_extension(x509.BasicConstraints(ca=False, path_length=None), critical=True) \
         .add_extension(x509.AuthorityKeyIdentifier.from_issuer_public_key(issuer_key.public_key()), critical=False) \
         .add_extension(x509.SubjectKeyIdentifier.from_public_key(key.public_key()), critical=False) \
@@ -254,9 +253,41 @@ def signing_cert_factory(wrapped_agents):
         except Exception as e:
             emit_gui_exception_log("PhoenixControlPanel.signing_factory", e)
 
+def symmetric_encryption_factory(wrapped_agents):
+    if not isinstance(wrapped_agents, list):
+        return
+
+
+    for wrapper in wrapped_agents:
+        try:
+
+            if not isinstance(wrapper, SymmetricEncryptionConsumer):
+                continue
+
+            # Must support signing certs
+            if not wrapper.requires_symmetric_encryption():
+                continue
+
+            # Make a random AES key (32 bytes = 256-bit)
+            aes_key = os.urandom(32)
+            aes_key_b64 = base64.b64encode(aes_key).decode()
+
+            symmetric_profile = {
+                "key": aes_key_b64,
+                "type": "aes",
+                "created_at": datetime.utcnow().isoformat() + "Z"
+            }
+
+            wrapper.set_symmetric_key(symmetric_profile)
+
+        except Exception as e:
+            emit_gui_exception_log("PhoenixControlPanel.symmetric_encryption_factory", e)
+
+
 
 def initialize():
     # Register listener at import time
     EventBus.on("crypto.service.connection_cert.injector", connection_cert_factory)
     EventBus.on("crypto.service.signing_cert.injector", signing_cert_factory)
+    EventBus.on("crypto.service.symmetric_encryption.injector", symmetric_encryption_factory)
     print("[SWARM] Receiver online. Listening for crypto.factory.connection_cert...")

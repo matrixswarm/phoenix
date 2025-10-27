@@ -68,7 +68,12 @@ class HTTPSConnector(BaseConnector):
             priv_pem = signing.get("remote_privkey")
 
             # mandatory
-            priv_key = RSA.import_key(priv_pem.encode())
+            try:
+                priv_key = RSA.import_key(priv_pem.encode())
+            except Exception as e:
+                print(f"[HTTPSConnector][{uid}] ❌ Invalid private key: {e}")
+                self._set_status("disconnected")
+                return None
             sig_b64 = sign_data(inner, priv_key)
 
             outer = {"sig": sig_b64, "content": inner}
@@ -102,8 +107,13 @@ class HTTPSConnector(BaseConnector):
             https_conn.sock = tls_sock
 
             # Verify SPKI pin
-            peer_cert = tls_sock.getpeercert(binary_form=True)
-            ok, actual_pin = verify_spki_pin(peer_cert, expected_pin)
+            try:
+                peer_cert = tls_sock.getpeercert(binary_form=True)
+                ok, actual_pin = verify_spki_pin(peer_cert, expected_pin)
+            except Exception as e:
+                print(f"[HTTPSConnector][{uid}] ⚠️ SPKI verification error: {e}")
+                ok = False
+
             if not ok:
                 print(f"[HTTPSConnector][{uid}] ❌ SPKI mismatch. Got: {actual_pin}")
                 https_conn.close()

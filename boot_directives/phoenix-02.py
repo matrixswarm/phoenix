@@ -161,7 +161,7 @@ matrix_directive = {
             "universal_id": "npc-simulator-1",
             "name": "npc_simulator",
             "app": "swarm-core",
-            "enabled": False,
+            "enabled": True,
             "tags": {
                 "packet_signing": {
                     "in": True,
@@ -203,7 +203,7 @@ matrix_directive = {
             "name": "apache_watchdog",
             "config": {
                 "ui": {
-                    "agent_tree": {"emoji": "🧭️"},
+                    "agent_tree": {"emoji": "🏹"},
                 },
                 "check_interval_sec": 10,
                 "service_name": "httpd",  # change to "httpd" for RHEL/CentOS
@@ -237,8 +237,8 @@ matrix_directive = {
 
         },
         {
-            "universal_id": "log_sentinel",
-            "name": "log_sentinel",
+            "universal_id": "log-streamer-1",
+            "name": "log_streamer",
             "tags": {
                 "packet_signing": {
                     "in": True,
@@ -247,10 +247,10 @@ matrix_directive = {
             },
             "config": {
                 "ui": {
-                    "agent_tree": {"emoji": "📜️"},
+                    "agent_tree": {"emoji": "👩🏻‍💻️"},
                 },
                 "service-manager": [{
-                    "role": ["hive.log@cmd_stream_log"],
+                    "role": ["hive.log_streamer@cmd_stream_log"],
                     "scope": ["parent", "any"],  # who it serves
                     "priority": {  # lower = more preferred
                         "hive.log.delivery": -1,
@@ -272,7 +272,7 @@ matrix_directive = {
             },
             "config": {
                 "ui": {
-                    "agent_tree": {"emoji": "🐚"},
+                    "agent_tree": {"emoji": "🖥️"},
                     "panel": ["terminal_streamer.stream_viewer"]
                 },
                 "safe_shell_mode": True,
@@ -384,7 +384,7 @@ matrix_directive = {
             "name": "system_health",
             "config": {
                 "ui": {
-                    "agent_tree": {"emoji": "🖥️"},
+                    "agent_tree": {"emoji": "⚕️"},
                 },
                 "check_interval_sec": 60,
                 "mem_threshold_percent": 90.0,  # Custom threshold
@@ -431,6 +431,7 @@ matrix_directive = {
         {
             "universal_id": "redis-hammer",
             "name": "redis_watchdog",
+            "enabled": False,
             "config": {
                 "ui": {
                     "agent_tree": {"emoji": "🎭"},
@@ -446,6 +447,54 @@ matrix_directive = {
             }
             ,
             "children": []
+        },
+        {
+            "universal_id": "log-health",
+            "name": "log_health",
+            "config": {
+                "ui": {
+                    "agent_tree": {"emoji": "💉"},
+                },
+                "log_path": "/var/log/httpd/error_log",
+                "service_name": "apache.error_log", # Must match the investigator path
+                "severity_rules": {
+                    "CRITICAL": ["segfault"],
+                    "WARNING": ["error", "client denied"]
+                },
+                "report_to_role": "hive.forensics.data_feed"
+            }
+        },
+        {
+            "universal_id": "triclops-1",
+            "name": "log_watcher",
+            "tags": {
+                "packet_signing": {
+                    "in": True,
+                    "out": True
+                }
+            },
+            "config": {
+                "ui": {
+                    "agent_tree": {"emoji": "👁️👁️👁️"},
+                    "panel": ["log_watcher.log_watcher"]
+                },
+                "service-manager": [{
+                    "role": ["logwatch.generate.digest@cmd_generate_system_log_digest"],
+                }],
+                "collectors": {
+                    "httpd": { "paths": ["/var/log/httpd/error_log"], "rotate_depth": 1, "max_lines": 1000 },
+                    "sshd": { "paths": ["/var/log/secure"], "rotate_depth": 1, "max_lines": 1000 },
+                    "fail2ban": { "paths": ["/var/log/fail2ban.log"], "rotate_depth": 1, "max_lines": 500 },
+                    "systemd": { "paths": ["/var/log/messages"], "rotate_depth": 1, "max_lines": 500 },
+                    "postfix": { "paths": ["/var/log/maillog"], "rotate_depth": 1, "max_lines": 500 },
+                    "dovecot": { "paths": ["/var/log/maillog"], "rotate_depth": 1, "max_lines": 500 }
+                },
+                "enable_oracle": 1,
+                "oracle_role": "hive.oracle",
+                "oracle_timeout": 120,
+                "patrol_interval_hours": 6,
+                "alert_role": "hive.alert"
+            }
         },
         {
             "universal_id": "telegram-bot-father-2",
@@ -476,7 +525,6 @@ matrix_directive = {
         {
             "universal_id": "wordpress-plugin-guard-1",
             "name": "wordpress_plugin_guard",
-            "enabled": False,
             "tags": {
                 "packet_signing": {"in": True, "out": True}
             },

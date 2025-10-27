@@ -6,8 +6,7 @@ from matrix_gui.core.dialog.restart_agent_dialog import RestartAgentDialog
 from matrix_gui.core.emit_gui_exception_log import emit_gui_exception_log
 
 class RestartAgentPanel(QObject):
-    """Launches a RestartAgentDialog and handles Phoenix callback + toaster."""
-
+    """Wrapper around :class:`RestartAgentDialog` with feed / toast plumbing."""
     def __init__(self, session_id, bus, conn, deployment, parent=None):
         super().__init__(parent)
         self.session_id = session_id
@@ -22,12 +21,12 @@ class RestartAgentPanel(QObject):
 
         # Listen for restart confirmation from Matrix → Phoenix
         self.bus.on(
-            f"inbound.verified.restart_dialog.result.{self.session_id}",
+            f"inbound.verified.restart_dialog.result",
             self._handle_result
         )
 
     def launch(self, uid: str = None):
-        """Open the restart dialog window, optionally pre-filling the UID."""
+        """Open the dialog and optionally pre-populate the *Target UID* field."""
         try:
 
             if not self.clear_to_show:
@@ -50,13 +49,17 @@ class RestartAgentPanel(QObject):
             emit_gui_exception_log("RestartAgentPanel.launch", e)
 
     def _on_finished(self, result):
-        """Dialog closed — nothing more to do; Matrix handles restart."""
+        """Runs when user cancels or after *Restart* is clicked."""
         if result != self._dlg.DialogCode.Accepted:
             self._cleanup()
         self.clear_to_show=True
 
     def _handle_result(self, session_id, channel, source, payload, ts):
-        """Phoenix inbound event: restart completed or failed."""
+        """
+        Receive **restart_dialog.result** and broadcast UI feedback.
+
+        Emits an info/error toast and a structured swarm-feed entry.
+        """
         try:
 
             print(f"{payload}")
@@ -104,7 +107,8 @@ class RestartAgentPanel(QObject):
             self._cleanup()
 
     def _cleanup(self):
-        """Ensure dialog and panel refs cleaned up."""
+        """Delete the dialog and clear internal references."""
+        self.clear_to_show = True
         if self._dlg:
             self._dlg.deleteLater()
             self._dlg = None

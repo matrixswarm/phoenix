@@ -75,12 +75,21 @@ def _connect_single(deployment, dep_id):
 
         # Enhance ctx with a bus
         ctx.bus = SessionBus(session_id)
+        ctx._bus_refs = []  # Track all bus bindings for cleanup
 
-        # Wire ConnectorBus → SessionBus
-        ConnectorBus.get(session_id).on("inbound.raw",
-            lambda **kw: ctx.bus.emit("inbound.message", **kw))
-        ConnectorBus.get(session_id).on("channel.status",
-            lambda **kw: ctx.bus.emit("channel.status", **kw))
+        # Wire ConnectorBus → SessionBus (record them for later removal)
+        def inbound_proxy(**kw):
+            ctx.bus.emit("inbound.message", **kw)
+
+        def status_proxy(**kw):
+            ctx.bus.emit("channel.status", **kw)
+
+        ConnectorBus.get(session_id).on("inbound.raw", inbound_proxy)
+        ConnectorBus.get(session_id).on("channel.status", status_proxy)
+        ctx._bus_refs.extend([
+            ("inbound.raw", inbound_proxy),
+            ("channel.status", status_proxy)
+        ])
 
         print(f"[BRIDGE] ConnectorBus wired into SessionBus for {session_id}")
 
@@ -104,15 +113,21 @@ def _connect_single(deployment, dep_id):
         return {}
 
 def destroy_session(session_id):
-    """
-    Tear down a session: close connectors, update bus, remove context.
-    """
     ctx = get_sessions().get(session_id)
     if not ctx:
         print(f"[DESTROY] ❌ No session {session_id} found")
         return
 
-    # Close all connectors
+    # --- 1. Disconnect bus bridges ---
+    if hasattr(ctx, "_bus_refs"):
+        for event_name, handler in ctx._bus_refs:
+            try:
+                ConnectorBus.get(session_id).off(event_name, handler)
+                print(f"[DESTROY] Disconnected {event_name} from {session_id}")
+            except Exception as e:
+                print(f"[DESTROY] Error unbinding {event_name}: {e}")
+
+    # --- 2. Close connectors ---
     for channel, conn in list(ctx.channels.items()):
         if hasattr(conn, "close"):
             try:
@@ -123,6 +138,10 @@ def destroy_session(session_id):
         ctx.channels.pop(channel, None)
         ctx.status[channel] = "disconnected"
 
-    # Remove from session manager
+    # --- 3. Clear the session bus ---
+    if hasattr(ctx, "bus"):
+        ctx.bus.clear()
+
+    # --- 4. Drop from manager ---
     get_sessions().remove(session_id)
-    print(f"[DESTROY] Session {session_id} removed from SessionManager")
+    print(f"[DESTROY] Session {session_id} completely removed.")

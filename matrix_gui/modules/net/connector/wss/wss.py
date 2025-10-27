@@ -44,8 +44,13 @@ def establish_ws_connection(host, port, agent, deployment, session_id, timeout=5
     cert_adapter = AgentCertWrapper(agent, deployment)
 
     # Write cert + key to temp files (Windows safe)
-    cert_path = write_temp_pem(cert_adapter.cert)
-    key_path  = write_temp_pem(cert_adapter.key)
+    cert_path = key_path = None
+    try:
+        cert_path = write_temp_pem(cert_adapter.cert)
+        key_path = write_temp_pem(cert_adapter.key)
+    except Exception as e:
+        print(f"[WSSConnector] ❌ Failed to write temp PEMs: {e}")
+        return None
 
     try:
         url = f"wss://{host}:{port}/ws"
@@ -65,6 +70,7 @@ def establish_ws_connection(host, port, agent, deployment, session_id, timeout=5
         # SPKI pin verification
         peer_cert = ws.sock.getpeercert(binary_form=True)
         ok, actual_pin = verify_spki_pin(peer_cert, cert_adapter.server_spki_pin)
+
         if not ok:
             ws.close()
             raise ConnectionError(f"SPKI mismatch: expected {cert_adapter.server_spki_pin}, got {actual_pin}")

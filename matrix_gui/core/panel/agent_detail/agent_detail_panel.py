@@ -13,8 +13,6 @@ from PyQt6.QtWidgets import QApplication
 class AgentDetailPanel(QWidget):
     def __init__(self, session_id, bus=None):
         super().__init__()
-
-
         try:
             self.bus=bus
             self.bound_session_id = session_id

@@ -1,5 +1,5 @@
 # Authored by Daniel F MacDonald and ChatGPT-5 aka The Generals
-import sys
+import sys, time
 print("Python:", sys.version)
 try:
     from PyQt6.QtCore import QT_VERSION_STR, PYQT_VERSION_STR
@@ -244,24 +244,67 @@ class PhoenixCockpit(QMainWindow):
         except Exception as e:
             emit_gui_exception_log("PhoenixCockpit.launch_session", e)
 
+
     def _start_pipe_monitor(self):
         self.pipe_timer = QTimer(self)
         self.pipe_timer.timeout.connect(self._poll_pipes)
         self.pipe_timer.start(200)
 
+        # periodic cleanup every 10 seconds
+        self.reaper_timer = QTimer(self)
+        self.reaper_timer.timeout.connect(self._reap_dead_sessions)
+        self.reaper_timer.start(10000)
+
     def _poll_pipes(self):
         try:
             for sess in list(self.session_processes):
+                proc = sess.get("proc")
                 conn = sess["conn"]
+
+                # --- Check for dead subprocess ---
+                if proc and not proc.is_alive():
+                    print(f"[WATCHDOG] 🧨 Session process {proc.pid} is dead.")
+                    self._cleanup_session(sess, conn)
+                    continue
+
+                # --- Handle inbound messages ---
                 try:
                     if conn.poll():
                         msg = conn.recv()
                         self._handle_session_msg(msg, conn)
                 except (BrokenPipeError, EOFError, OSError):
-                    print(f"[MIRV] 🛑 Session pipe closed for pid={sess['proc'].pid}")
+                    print(f"[MIRV] 🛑 Session pipe closed for pid={proc.pid if proc else 'unknown'}")
                     self._cleanup_session(sess, conn)
+
         except Exception as e:
             emit_gui_exception_log("PhoenixCockpit._poll_pipes", e)
+
+    def _reap_dead_sessions(self):
+        """Periodically nuke orphaned or crashed session processes."""
+        try:
+            dead = []
+            for sess in list(self.session_processes):
+                proc = sess.get("proc")
+                conn = sess.get("conn")
+                sid = sess.get("session_id")
+
+                # mark if process no longer alive or connection closed
+                if not proc or not proc.is_alive() or (conn and conn.closed):
+                    dead.append(sess)
+
+            for sess in dead:
+                try:
+                    print(f"[MIRV] ☠ Reaper removing stale session {sess.get('session_id')}")
+                    self._cleanup_session(sess, sess.get("conn"))
+                except Exception as e:
+                    print(f"[MIRV][WARN] Reaper failed for {sess.get('session_id')}: {e}")
+
+            if dead:
+                # resync counters
+                self.status_sessions.setText(f"Sessions: {len(self._active_sessions)}")
+
+        except Exception as e:
+            print(f"[MIRV][ERROR] Reaper loop failed: {e}")
 
     def _cleanup_session(self, sess, conn):
         try:
@@ -338,6 +381,14 @@ class PhoenixCockpit(QMainWindow):
                 # always sync sessions label
                 self.status_sessions.setText(f"Sessions: {len(self._active_sessions)}")
 
+            elif mtype == "heartbeat":
+                for sess in self.session_processes:
+                    if sess["conn"] == conn:
+                        sess["last_heartbeat"] = time.time()
+                        break
+                return
+
+
             elif mtype == "register_cmd":
                 control = msg["control"]
                 action = msg["action"]
@@ -404,14 +455,49 @@ class PhoenixCockpit(QMainWindow):
                 message = msg.get("message", "Action completed.")
                 QTimer.singleShot(0, lambda: show_toast(message))
 
+
             elif mtype == "exit":
+
                 sid = msg.get("session_id")
                 print(f"[MIRV] 🛑 Session {sid} requested exit")
-                # remove from processes list
-                self.session_processes = [s for s in self.session_processes if s["conn"] != conn]
-                # remove from active sessions
-                self._active_sessions.discard(sid)
-                self.status_sessions.setText(f"Sessions: {len(self._active_sessions)}")
+
+                # Find the matching session record
+                sess = next((s for s in self.session_processes if s["conn"] == conn), None)
+                if not sess:
+                    print(f"[MIRV][WARN] No matching session found for exit request {sid}")
+                    return
+                try:
+                    proc = sess["proc"]
+                    # Close connection cleanly
+                    try:
+                        conn.close()
+                    except Exception:
+                        pass
+                    # Kill process if still running
+                    if proc.is_alive():
+                        proc.terminate()
+                        proc.join(timeout=2)
+                        if proc.is_alive():
+                            print(f"[MIRV][WARN] Process {proc.pid} still alive after terminate()")
+                        else:
+                            print(f"[MIRV] Process {proc.pid} terminated")
+                    # Remove UI tab if exists
+                    tab_index = sess.get("tab_index")
+                    if tab_index is not None and tab_index < self.tab_stack.count():
+                        self.tab_stack.removeTab(tab_index)
+                        print(f"[MIRV] Closed tab for session {sid}")
+                    # Drop from tracking structures
+                    self.session_processes = [s for s in self.session_processes if s is not sess]
+                    self._active_sessions.discard(sid)
+                    # Update status bar
+                    self.status_sessions.setText(f"Sessions: {len(self._active_sessions)}")
+                    print(f"[MIRV] Session {sid} fully cleaned up")
+
+
+                except Exception as e:
+
+                    emit_gui_exception_log("PhoenixCockpit._handle_session_msg.exit_cleanup", e)
+
 
             else:
                 print(f"[MIRV] Unknown msg {msg}")
@@ -728,9 +814,8 @@ def _launch(app, splash, main_cls):
     cockpit.show()
 
 if __name__ == '__main__':
+
     multiprocessing.freeze_support()
-
-
     app = QApplication(sys.argv)
 
     # Load Hive stylesheet

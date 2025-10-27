@@ -63,8 +63,6 @@ def mint_directive_for_deployment(template_directive: dict, wrapped_agents: list
             if "allowlist_ips" in config_overrides:
                 print(f"[DEPLOYMENT MINT] Injecting allowlist_ips={config_overrides['allowlist_ips']} for agent '{uid}'")
 
-
-
             # ensure config block exists in node
             node.setdefault("config", {})
 
@@ -95,10 +93,23 @@ def mint_directive_for_deployment(template_directive: dict, wrapped_agents: list
                                 val = signing.get(field)
                                 if val:
                                     set_nested(node, target_path, field, val)
-                    #if tag_info.get("include_serial"):
-                    #    serial = signing.get("serial")
-                    #    if serial:
-                    #        set_nested(node, target_path[:-1], "serial", serial)
+                if tag_name == "symmetric_encryption":
+                    target_path = tag_info["target"]  # e.g. ["config", "security", "symmetric_encryption"]
+                    sym = wrapper.get_symmetric_encryption() or {}
+
+                    # Make sure nested dicts exist
+                    config = node.setdefault("config", {})
+                    security = config.setdefault("security", {})
+                    sym_node = security.setdefault("symmetric_encryption", {})
+
+                    # Copy known fields (key, type, created_at)
+                    for key, val in sym.items():
+                        if val is not None:
+                            sym_node[key] = val
+                            #print(f"  → {key}: {val[:12] + '...'}" if isinstance(val, str) else f"  → {key}: {val}")
+
+                    # Optional: diagnostic preview
+                    #print(json.dumps(config.get("security", {}), indent=2))
 
                 elif tag_name == "connection_cert":
                     target_path = tag_info["target"]

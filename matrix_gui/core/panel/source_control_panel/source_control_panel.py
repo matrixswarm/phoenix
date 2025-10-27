@@ -55,7 +55,7 @@ class SourceControlPanel(QGroupBox):
             # Subscribe to tree updates so we can refresh agent list
             if self.bus:
                 self.bus.on(
-                    f"inbound.verified.agent_tree_master.update.{self.session_id}",
+                    f"inbound.verified.agent_tree_master.update",
                     self._update_agent_list
                 )
 

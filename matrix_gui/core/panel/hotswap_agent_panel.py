@@ -6,6 +6,16 @@ from matrix_gui.core.class_lib.packet_delivery.packet.standard.command.packet im
 from matrix_gui.core.emit_gui_exception_log import emit_gui_exception_log
 
 class HotswapAgentPanel(QObject):
+    """
+    Panel that streams a compiled agent file to a running target agent and
+    restarts it atomically (hot-swap).
+
+    Notes
+    -----
+    • Provides a *running-agents* dropdown sourced from the current tree
+    • Emits **cmd_hotswap_agent** with encoded payload
+    • Handles **hotswap_agent.confirm** for user feedback.
+    """
     def __init__(self, session_id, bus, conn, deployment, parent=None, tree=None):
         super().__init__(parent)
         self.session_id = session_id
@@ -18,7 +28,7 @@ class HotswapAgentPanel(QObject):
         self.clear_to_show = True
 
         self.bus.on(
-            f"inbound.verified.hotswap_agent.confirm.{self.session_id}",
+            f"inbound.verified.hotswap_agent.confirm",
             self._handle_confirm
         )
 
@@ -43,6 +53,7 @@ class HotswapAgentPanel(QObject):
 
 
     def launch(self, tree_data, uid: str = None):
+        """Open dialog; supply current tree so the dropdown is populated."""
         try:
             if not self.clear_to_show:
                 return
@@ -60,6 +71,7 @@ class HotswapAgentPanel(QObject):
             emit_gui_exception_log("HotswapAgentPanel.launch", e)
 
     def _on_finished(self, result):
+        """Validate inputs, build packet, emit over bus."""
         if result != QDialog.DialogCode.Accepted:
             self._cleanup()
             return
@@ -108,6 +120,7 @@ class HotswapAgentPanel(QObject):
             self._cleanup()
 
     def _handle_confirm(self, session_id, channel, source, payload, ts):
+        """Toast + feed entry on success or failure."""
         try:
             content = payload.get("content", {})
             agent = content.get("target_universal_id", "unknown")
@@ -143,6 +156,8 @@ class HotswapAgentPanel(QObject):
             self._cleanup()
 
     def _cleanup(self):
+        """Clear dialog and internal flags."""
+        self.clear_to_show=True
         if self._dlg:
             self._dlg.deleteLater()
             self._dlg = None

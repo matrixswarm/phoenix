@@ -1,7 +1,7 @@
 import uuid
-from PyQt6.QtWidgets import QWidget, QHBoxLayout, QLabel, QPushButton, QMessageBox
+from PyQt6.QtWidgets import QWidget, QHBoxLayout, QLabel, QPushButton, QMessageBox, QMenu
 from PyQt6 import QtCore
-from PyQt6.QtGui import QIcon, QPixmap
+
 from PyQt6.QtWidgets import QComboBox
 from matrix_gui.core.event_bus import EventBus
 from matrix_gui.modules.directive.directive_manager_dialog import DirectiveManagerDialog
@@ -12,10 +12,17 @@ from PyQt6.QtWidgets import QFileDialog
 
 class PhoenixControlPanel(QWidget):
     """
-    Control Panel:
-      - unlock vault → start SessionManager + OutboundDispatcher
-      - choose connection profile → build ConnectionGroup → connect
-      - minimal UI; tab lifecycle handled elsewhere (TabStack)
+    Thin top-bar widget that lets the user unlock a vault, pick a
+    deployment profile, and spin up a live Phoenix *SessionWindow*.
+
+    Signals
+    -------
+    vault_updated(dict)
+        Emitted after the connection-manager dialog mutates ``self.vault_data``.
+    request_vault_save(dict)
+        Ask the cockpit to persist the in-memory vault copy to disk.
+    request_vault_load()
+        Ask the cockpit to (re)load a vault from disk.
     """
     vault_updated = QtCore.pyqtSignal(dict)
     request_vault_save = QtCore.pyqtSignal(dict)
@@ -23,68 +30,49 @@ class PhoenixControlPanel(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
 
-        self.vault_unlocked: bool = False
-        self.vault_data = None
-        self.vault_path = None
-        self.password = None
-
-        # ---- UI ----
         self.layout = QHBoxLayout(self)
+        self.layout.setContentsMargins(4, 4, 4, 4)
+        self.layout.setSpacing(8)
 
-
-        #self.vault_status = QLabel("Vault: locked")
-        #self.vault_status.setObjectName("vaultStatus")
-
-        # Deployment selector
+        # === Primary Controls ===
         self.layout.addWidget(QLabel("Deployment:"))
         self.deployment_selector = QComboBox()
         self.layout.addWidget(self.deployment_selector)
 
-
-        # Buttons with icons + colors
-        self.connect_btn = QPushButton(" Connect")
+        self.connect_btn = QPushButton("🔌 Connect")
         self.connect_btn.setObjectName("connect")
-        self.connect_btn.setIcon(QIcon("matrix_gui/resources/icons/connect.svg"))  # or fromTheme("network-connect")
-        self.connect_btn.setIconSize(QtCore.QSize(20, 20))
         self.connect_btn.clicked.connect(self.launch_deployment_dialog)
         self.layout.addWidget(self.connect_btn)
 
-        self.btn_connection_manager = QPushButton(" Connections")
-        self.btn_connection_manager.setObjectName("connMgr")
-        self.btn_connection_manager.setIcon(QIcon("matrix_gui/resources/icons/network.svg"))
-        self.btn_connection_manager.setIconSize(QtCore.QSize(20, 20))
-        self.btn_connection_manager.clicked.connect(self.launch_connection_manager)
-        self.layout.addWidget(self.btn_connection_manager)
+        self.conn_btn = QPushButton("🌐 Connections")
+        self.conn_btn.setObjectName("connMgr")
+        self.conn_btn.clicked.connect(self.launch_connection_manager)
+        self.layout.addWidget(self.conn_btn)
 
-        self.manage_directive_btn = QPushButton(" Directives")
-        self.manage_directive_btn.setObjectName("document")
-        self.manage_directive_btn.setIcon(QIcon("matrix_gui/resources/icons/document.svg"))
-        self.manage_directive_btn.setIconSize(QtCore.QSize(20, 20))
-        self.manage_directive_btn.clicked.connect(self.open_directive_manager)
-        self.layout.addWidget(self.manage_directive_btn)
+        self.directives_btn = QPushButton("📄 Directives")
+        self.directives_btn.setObjectName("document")
+        self.directives_btn.clicked.connect(self.open_directive_manager)
+        self.layout.addWidget(self.directives_btn)
 
-        self.change_vault_btn = QPushButton(" Vault")
-        self.change_vault_btn.setObjectName("unlocked")
-        self.change_vault_btn.setIcon(QIcon("matrix_gui/resources/icons/unlock.svg"))
-        self.change_vault_btn.setIconSize(QtCore.QSize(20, 20))
-        self.change_vault_btn.clicked.connect(self.reopen_vault)
-        self.layout.addWidget(self.change_vault_btn)
+        self.vault_btn = QPushButton("🔐 Vault")
+        self.vault_btn.setObjectName("vault")
+        self.vault_btn.clicked.connect(self.reopen_vault)
+        self.layout.addWidget(self.vault_btn)
 
-        # --- tighten vertical footprint ---
-        self.setContentsMargins(0, 0, 0, 0)
-        self.layout.setContentsMargins(0, 0, 0, 0)
-        self.layout.setSpacing(4)
-        self.setFixedHeight(42)
-
-        #self.layout.addWidget(self.vault_status)
+        # Stretch at end to push controls left
         self.layout.addStretch()
 
-        # ---- bus ----
+        # Wire events
         EventBus.on("vault.unlocked", self.on_vault_unlocked)
         EventBus.on("vault.update", self.on_vault_update)
 
     def refresh_deployments(self):
+        """Populate the *Deployment* combobox from ``self.vault_data``.
 
+        • Clears the list, then iterates over ``vault_data["deployments"]``
+        • Skips malformed entries (non-dicts)
+        • Any exception is logged via :func:`emit_gui_exception_log`.
+        """
         try:
             self.deployment_selector.clear()
             deployments = (self.vault_data or {}).get("deployments", {})
@@ -97,6 +85,13 @@ class PhoenixControlPanel(QWidget):
             emit_gui_exception_log("PhoenixControlPanel.launch", e)
 
     def on_vault_update(self, **kwargs):
+        """Handle a ``vault.update`` bus event.
+
+        Parameters
+        ----------
+        **kwargs
+            ``data`` – the fresh vault dict shoved in by the emitter.
+        """
         try:
             self.vault_data = kwargs.get("data", self.vault_data)
             self.refresh_deployments()
@@ -104,6 +99,12 @@ class PhoenixControlPanel(QWidget):
             emit_gui_exception_log("PhoenixControlPanel.on_vault_update", e)
 
     def launch_deployment_dialog(self):
+        """Open a live session for the currently selected deployment.
+
+        Validates that a vault is unlocked and the selected deployment exists,
+        then emits the **session.open.requested** bus event with a brand-new
+        UUID-4 ``session_id`` and the deployment metadata payload.
+        """
         dep_id = self.deployment_selector.currentData()
         if not dep_id:
             QMessageBox.warning(self, "No Deployment", "Please select a deployment first.")
@@ -133,6 +134,7 @@ class PhoenixControlPanel(QWidget):
         )
 
     def launch_connection_manager(self):
+        """Open the *ConnectionManagerDialog* for editing saved SSH profiles."""
         dlg = ConnectionManagerDialog(self.vault_data, self)
         dlg.exec()
         #self.refresh_deployments()
@@ -140,7 +142,7 @@ class PhoenixControlPanel(QWidget):
 
 
     def save_vault(self):
-
+        """Persist the current in-memory vault to a user-chosen ``*.json`` file."""
         path, _ = QFileDialog.getSaveFileName(self, "Save Vault", filter="Vault JSON (*.json)")
         if path:
             import json
@@ -149,6 +151,7 @@ class PhoenixControlPanel(QWidget):
                 QMessageBox.information(self, "Saved", f"Vault saved to {path}")
 
     def reopen_vault(self):
+        """Close the active vault and trigger the cockpit’s re-unlock workflow."""
         reply = QMessageBox.question(
             self, "Close current vault?",
             "Are you sure you want to close this vault?",
@@ -165,6 +168,7 @@ class PhoenixControlPanel(QWidget):
     # Vault lifecycle
     # =========================================================
     def on_vault_unlocked(self, **kwargs):
+        """Receive the ``vault.unlocked`` signal and cache path / password."""
         self.vault_unlocked = True
         self.vault_data = kwargs.get("vault_data")
         self.password = kwargs.get("password")
@@ -192,12 +196,3 @@ class PhoenixControlPanel(QWidget):
 
     def emit_reload(self):
         self.request_vault_load.emit()
-
-    # =========================================================
-    # Misc bus sinks
-    # =========================================================
-    def on_ops_feed(self, msg: str):
-        try:
-            print("[OPS]", msg)
-        except Exception:
-            pass

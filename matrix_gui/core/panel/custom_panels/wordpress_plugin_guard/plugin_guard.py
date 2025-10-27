@@ -261,7 +261,7 @@ class PluginGuard(PhoenixPanelInterface):
     # === Signal Handling ===
     def _connect_signals(self):
         try:
-            scoped = f"inbound.verified.plugin_guard.panel.update.{self.session_id}"
+            scoped = f"inbound.verified.plugin_guard.panel.update"
             self.bus.on(scoped, self._queue_output)
             # after connecting, immediately request current status
             QTimer.singleShot(250, self._request_initial_status)
@@ -287,7 +287,7 @@ class PluginGuard(PhoenixPanelInterface):
 
     def _disconnect_signals(self):
         try:
-            scoped = f"inbound.verified.plugin_guard.panel.update.{self.session_id}"
+            scoped = f"inbound.verified.plugin_guard.panel.update"
             self.bus.off(scoped, self._safe_handle_output)
         except Exception as e:
             emit_gui_exception_log("PluginGuard._disconnect_signals", e)

@@ -50,7 +50,7 @@ def mint_deployment_metadata(
                 }
             })
 
-            conn_certs = wrapper.get_connection() or {}
+            wrapper.get_connection() or {}
             signing = wrapper.get_signing() or {}
 
             entry = {}
@@ -65,6 +65,16 @@ def mint_deployment_metadata(
                     **({"pubkey": signing.get("pubkey")} if signing.get("pubkey") else {}),
                     **({"privkey":       signing.get("privkey")}       if signing.get("privkey") else {}),
                     **({"serial":        signing.get("serial")}        if signing.get("serial") else {})
+                }
+
+            symmetric = wrapper.get_symmetric_encryption() or {}
+
+            if symmetric:
+
+                entry["symmetric_encryption"] = {
+                    **({"key": symmetric.get("key")} if symmetric.get("key") else {}),
+                    **({"type": symmetric.get("type")} if symmetric.get("type") else {}),
+                    **({"created_at": symmetric.get("created_at")} if symmetric.get("created_at") else {})
                 }
 
             if entry:

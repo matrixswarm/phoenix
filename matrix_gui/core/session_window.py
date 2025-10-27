@@ -2,6 +2,9 @@
 import sys
 import time
 import datetime
+from pathlib import Path
+import inspect
+
 import copy
 from PyQt6.QtWidgets import QMainWindow
 from PyQt6.QtWidgets import QStackedWidget
@@ -11,8 +14,7 @@ from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QToolBar,
     QGroupBox, QLabel, QApplication
 )
-
-from matrix_gui.core.dialog.restart_agent_dialog import RestartAgentDialog
+from matrix_gui.modules.net import deployment_connector
 from matrix_gui.core.panel.control_bar import PanelButton
 from matrix_gui.core.panel.agent_detail.agent_detail_panel import AgentDetailPanel
 from matrix_gui.core.panel.crypto_alert.crypto_alert import CryptoAlertPanel
@@ -27,7 +29,6 @@ from matrix_gui.core.dispatcher.outbound_dispatcher import OutboundDispatcher
 from matrix_gui.config.boot.globals import get_sessions
 from matrix_gui.core.panel.restart_agent_panel import RestartAgentPanel
 from matrix_gui.core.panel.replace_agent_panel import ReplaceAgentPanel
-from matrix_gui.core.dialog.delete_agent_dialog import DeleteAgentDialog
 from matrix_gui.core.panel.hotswap_agent_panel import HotswapAgentPanel
 from matrix_gui.core.panel.inject_agent_panel import InjectAgentPanel
 from matrix_gui.core.panel.control_bar import ControlBar
@@ -39,8 +40,6 @@ def run_session(session_id, conn):
 
     # --- Dynamically locate and load the global Hive theme ---
     try:
-        from pathlib import Path
-        import inspect
 
         # Find the directory where this file (session_window.py) lives
         current_file = Path(inspect.getfile(inspect.currentframe())).resolve()
@@ -72,6 +71,8 @@ def run_session(session_id, conn):
         outbound = OutboundDispatcher(ctx.bus, get_sessions(), deployment)
         ctx.inbound, ctx.outbound = inbound, outbound
 
+        print(f"[DEBUG] Bus ID for session {session_id}: {id(ctx.bus)}")
+
         win = SessionWindow(
             deployment_id=deployment.get("id"),
             session_id=ctx.id,
@@ -80,7 +81,8 @@ def run_session(session_id, conn):
             conn=conn,
             bus=ctx.bus,
             inbound=inbound,
-            outbound=outbound
+            outbound=outbound,
+            ctx=ctx
         )
 
         # Add QTimer for pipe polling
@@ -94,24 +96,27 @@ def run_session(session_id, conn):
         timer.timeout.connect(poll_conn)
         timer.start(200)  # every 200 ms
 
-        win.setWindowFlag(Qt.WindowType.FramelessWindowHint, True)
-        win.setWindowFlag(Qt.WindowType.Tool, True)
+        # make window embeddable and not auto-activate
+        win.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.SubWindow)
         win.setAttribute(Qt.WidgetAttribute.WA_NativeWindow, True)
         win.setAttribute(Qt.WidgetAttribute.WA_DontCreateNativeAncestors, True)
-
+        win.create()  # physically create the native handle without showing yet
+        wid = int(win.winId())
+        conn.send({"type": "window_ready", "session_id": session_id, "win_id": wid})
         win.show()
-        try:
-            # Send the native window id so the cockpit can embed this window
-            wid = int(win.winId())
-            conn.send({
-                "type": "window_ready",
-                "session_id": session_id,
-                "win_id": wid
-            })
-        except Exception as e:
-            emit_gui_exception_log("session_window.run_session.window_ready", e)
 
-        app.exec()
+
+        try:
+            app.exec()
+        except Exception as e:
+            import traceback
+            print("[SESSION][FATAL] Exception in session loop:")
+            traceback.print_exc()
+        finally:
+            try:
+                conn.send({"type": "exit", "session_id": session_id})
+            except Exception as inner:
+                print(f"[SESSION][FATAL] Failed to signal exit: {inner}")
 
 
     except Exception as e:
@@ -119,11 +124,15 @@ def run_session(session_id, conn):
 
 
 class SessionWindow(QMainWindow):
-    def __init__(self, deployment_id, session_id, cockpit_id, deployment, conn, bus, inbound, outbound):
+    def __init__(self, deployment_id, session_id, cockpit_id, deployment, conn, bus, inbound, outbound, ctx):
         super().__init__()
         try:
 
             self.deployment_id=deployment_id
+
+            self._hb_timer = QTimer(self)
+            self._hb_timer.timeout.connect(self._send_heartbeat)
+            self._hb_timer.start(2000)  # every 2 seconds
 
             self.conn = conn
             self.session_id = session_id
@@ -132,7 +141,7 @@ class SessionWindow(QMainWindow):
             self.bus = bus
             self.inbound = inbound
             self.outbound = outbound
-
+            self.ctx = ctx
             self._panel_cache = {}
 
             self.active_log_token = None
@@ -190,18 +199,32 @@ class SessionWindow(QMainWindow):
 
             # Events
             self.bus.on("channel.status", self._handle_channel_status)
-            self.bus.on(f"inbound.verified.agent_log_view.update.{self.session_id}", self._handle_log_update)
+            self.bus.on(f"inbound.verified.agent_log_view.update", self._handle_log_update)
             self.bus.on("gui.agent.selected", self._handle_agent_selected)
             self.bus.on("gui.log.token.updated", self._set_active_log_token)
 
         except Exception as e:
             emit_gui_exception_log("session_window.__init__", e)
 
+    def _send_heartbeat(self):
+        try:
+            if self.conn:
+                self.conn.send({"type": "heartbeat", "session_id": self.cockpit_id})
+        except (BrokenPipeError, OSError):
+            print("[SESSION][HEARTBEAT] Pipe lost; shutting down session.")
+            self._hb_timer.stop()
+            return
+
+
+
     def _set_active_log_token(self, session_id, token, agent_title=None, **_):
-        self.active_log_token = token
-        self.current_log_title = agent_title or "Unknown"
-        self.log_view.set_active_token(token)  # reset log panel
-        self._update_log_status_bar()
+        try:
+            self.active_log_token = token
+            self.current_log_title = agent_title or "Unknown"
+            self.log_view.set_active_token(token)  # reset log panel
+            self._update_log_status_bar()
+        except Exception as e:
+            emit_gui_exception_log("session_window._set_active_log_token", e)
 
     def _handle_channel_status(self, session_id, channel, status, info=None, **_):
         try:
@@ -263,22 +286,24 @@ class SessionWindow(QMainWindow):
 
     def _load_custom_panel(self, panel_name, node):
         try:
-
             cache_key = panel_name
 
             if cache_key in getattr(self, "_panel_cache", {}):
                 return self._panel_cache[cache_key]
 
-
             mod_path, class_name = panel_name.rsplit(".", 1)
             class_name = "".join(part.capitalize() for part in class_name.split("_"))
             full_mod = f"matrix_gui.core.panel.custom_panels.{mod_path}.{panel_name.split('.')[-1]}"
-            mod = __import__(full_mod, fromlist=[class_name])
-            PanelClass = getattr(mod, class_name)
 
+            try:
+                mod = __import__(full_mod, fromlist=[class_name])
+            except ModuleNotFoundError:
+                print(f"[WARNING][UI] Custom panel '{panel_name}' not found — skipping.")
+                return None
+
+            PanelClass = getattr(mod, class_name)
             panel = PanelClass(session_id=self.session_id, bus=self.bus, node=node, session_window=self)
 
-            # only cache if the panel opts in
             if getattr(PanelClass, "cache_panel", False):
                 self._panel_cache[cache_key] = panel
 
@@ -593,18 +618,22 @@ class SessionWindow(QMainWindow):
         except Exception as e:
             emit_gui_exception_log("SessionWindow.handle_deployment_update", e)
 
-    def closeEvent(self, ev):
+    def closeEvent(self, event):
+        print(f"[SESSION] {self.session_id} closing, destroying session")
         try:
-            print(f"[SESSION] Window for {self.session_id} closing, notifying cockpit...")
             if self.conn:
                 try:
                     self.conn.send({
                         "type": "exit",
-                        "session_id": self.cockpit_id
+                        "session_id": self.session_id
                     })
-                except Exception as e:
-                    print(f"[SESSION][WARN] Could not notify cockpit: {e}")
+                except (BrokenPipeError, OSError):
+                    print("[SESSION][EXIT] Pipe already closed – skipping exit signal.")
+                finally:
+                    self.conn.close()
+            deployment_connector.destroy_session(self.session_id)
         except Exception as e:
-            emit_gui_exception_log("SessionWindow.closeEvent", e)
-        finally:
-            super().closeEvent(ev)
+            emit_gui_exception_log("SessionWindow.closeEvent.destroy_session", e)
+        super().closeEvent(event)
+
+

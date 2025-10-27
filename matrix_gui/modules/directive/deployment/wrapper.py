@@ -7,6 +7,7 @@ from matrix_gui.modules.directive.entity.adapters.agent_connection_wrapper impor
 from matrix_gui.modules.directive.entity.adapters.agent_cert_wrapper import AgentCertWrapper
 from matrix_gui.modules.directive.entity.adapters.agent_signing_cert_wrapper import AgentSigningCertWrapper
 from matrix_gui.modules.directive.entity.adapters.agent_directive_wrapper import AgentDirectiveWrapper
+from matrix_gui.modules.directive.entity.adapters.agent_symmetric_key_wrapper import AgentSymmetricKeyWrapper
 
 def agent_aggregator_wrapper(template):
     aa = AgentAggregator()
@@ -70,3 +71,11 @@ def agent_directive_wrapper(agent_aggregator):
 
     return wrapped
 
+def agent_symmetric_encryption_wrapper(agent_aggregator):
+    wrapped = []
+
+    for agent in agent_aggregator.get_agents():
+        wrapper = AgentSymmetricKeyWrapper(agent)
+        wrapped.append(wrapper)
+
+    return wrapped

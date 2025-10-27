@@ -5,8 +5,15 @@ from matrix_gui.core.dialog.inject_agent_dialog import InjectAgentDialog
 from matrix_gui.core.emit_gui_exception_log import emit_gui_exception_log
 
 class InjectAgentPanel(QObject):
-    """Launches an InjectAgentDialog and handles Phoenix callback + toaster."""
+    """
+    GUI helper to add **new** agents beneath a parent UID at runtime.
 
+    Supports three injection sources:
+
+    1. Pick an existing agent node from the unlocked vault
+    2. Load a JSON definition from disk
+    3. Paste / edit JSON manually in the text editor
+    """
     def __init__(self, session_id, bus, conn, deployment, parent=None):
         super().__init__(parent)
         self.session_id = session_id
@@ -19,12 +26,12 @@ class InjectAgentPanel(QObject):
 
         # Listen for injection confirmation from Matrix → Phoenix
         self.bus.on(
-            f"inbound.verified.inject_dialog.result.{self.session_id}",
+            f"inbound.verified.inject_dialog.result",
             self._handle_result
         )
 
     def launch(self, uid: str = None):
-        """Open the inject dialog window."""
+        """Show dialog and optionally pre-select the parent agent."""
         try:
             if not self.clear_to_show:
                 return
@@ -47,13 +54,13 @@ class InjectAgentPanel(QObject):
             emit_gui_exception_log("InjectAgentPanel.launch", e)
 
     def _on_finished(self, result):
-        """Dialog closed — nothing more to do; Matrix handles injection."""
+        """Convert UI JSON → packet and emit *cmd_inject_agent*."""
         if result != self._dlg.DialogCode.Accepted:
             self._cleanup()
         self.clear_to_show = True
 
     def _handle_result(self, session_id, channel, source, payload, ts):
-        """Phoenix inbound event: injection completed or failed."""
+        """Listen for **inject_dialog.result** and surface UI feedback."""
         try:
             content = payload.get("content", {})
             uid = content.get("target_universal_id", "unknown")
@@ -103,7 +110,8 @@ class InjectAgentPanel(QObject):
             self._cleanup()
 
     def _cleanup(self):
-        """Ensure dialog and panel refs cleaned up."""
+        """Destroy dialog and reset state."""
+        self.clear_to_show = True
         if self._dlg:
             self._dlg.deleteLater()
             self._dlg = None

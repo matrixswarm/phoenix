@@ -172,20 +172,20 @@ class ControlBar(QWidget):
     def _build_default_buttons(self):
         try:
             self.default_buttons = [
-                self._make_button("☠️", "Delete Agent", self.session_window._launch_delete_agent),
-                self._make_button("♻️", "Replace Source", self.session_window._launch_replace_agent_source),
-                self._make_button("🔄", "Restart Agent", self.session_window._launch_restart_agent),
-                self._make_button("🔥", "Hotswap Agent", self.session_window._launch_hotswap_agent_modal),
-                self._make_button("🧬", "Inject Agent", self.session_window._launch_inject_agent_modal),
+                self._make_button("", "☠️ Delete", self.session_window._launch_delete_agent),
+                self._make_button("", "♻️ Replace Source", self.session_window._launch_replace_agent_source),
+                self._make_button("", "🔄 Restart", self.session_window._launch_restart_agent),
+                self._make_button("", "🔥 Hotswap", self.session_window._launch_hotswap_agent_modal),
+                self._make_button("", "🧬 Inject", self.session_window._launch_inject_agent_modal),
 
 
-                self._make_toggle_button("🧵", "Threads",
+                self._make_toggle_button("", "🧵 Threads",
                     lambda: self.session_window.detail_panel.inspector_group.isVisible(),
                     self.session_window.toggle_threads_panel),
-                self._make_toggle_button("⚙️", "Config",
+                self._make_toggle_button("", "⚙️ Config",
                     lambda: self.session_window.detail_panel.config_group.isVisible(),
                     self.session_window.toggle_config_panel),
-                self._make_toggle_button("⏸️", "Pause Logs",
+                self._make_toggle_button("", "⏸️ Logs",
                     lambda: self.session_window.log_paused,
                     self.session_window._toggle_log_pause)
             ]

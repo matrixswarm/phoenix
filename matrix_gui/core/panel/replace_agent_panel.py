@@ -8,6 +8,13 @@ from matrix_gui.core.class_lib.packet_delivery.packet.standard.command.packet im
 from matrix_gui.core.emit_gui_exception_log import emit_gui_exception_log
 
 class ReplaceAgentPanel(QObject):
+    """
+    Lets an operator hot-replace an agent’s on-disk source file.
+
+    The panel collects a ``.py`` file, base64-encodes it, attaches a SHA-256
+    and emits **cmd_replace_source** to Matrix. Success is confirmed via
+    **replace_agent_source.confirm**.
+    """
     def __init__(self, session_id, bus, conn, deployment, parent=None):
         super().__init__(parent)
         self.session_id = session_id
@@ -18,11 +25,12 @@ class ReplaceAgentPanel(QObject):
         self._dlg = None
         # Listen for server confirmation
         self.bus.on(
-            f"inbound.verified.replace_agent_source.confirm.{self.session_id}",
+            f"inbound.verified.replace_agent_source.confirm",
             self._handle_confirm
         )
 
     def launch(self):
+        """Display the *ReplaceAgentDialog* file picker."""
         try:
             self._dlg = ReplaceAgentDialog(parent=self.parent)
 
@@ -32,6 +40,7 @@ class ReplaceAgentPanel(QObject):
             emit_gui_exception_log("ReplaceAgentPanel.launch", e)
 
     def _on_finished(self, result):
+        """If accepted, read file → encode → emit outbound packet."""
         if result != QDialog.DialogCode.Accepted:
             self._cleanup()
             return
@@ -78,6 +87,7 @@ class ReplaceAgentPanel(QObject):
             self._cleanup()
 
     def _handle_confirm(self, session_id, channel, source, payload, ts):
+        """Handle Matrix confirmation and surface a toast + feed entry."""
         try:
             content = payload.get("content", {})
             agent = content.get("target_agent_name", "unknown")
@@ -113,6 +123,8 @@ class ReplaceAgentPanel(QObject):
             self._cleanup()
 
     def _cleanup(self):
+        """Free dialog resources and reset state."""
+        self.clear_to_show = True
         if self._dlg:
             self._dlg.deleteLater()
             self._dlg = None

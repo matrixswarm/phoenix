@@ -22,6 +22,9 @@ class AgentDirectiveWrapper:
     def get_signing(self) -> dict:
         return self.agent.get_item("signing_cert") or {}
 
+    def get_symmetric_encryption(self) -> dict:
+        return self.agent.get_item("symmetric_encryption") or {}
+
     def get_connection_cert(self) -> dict:
         return self.agent.get_item("connection_cert") or {}
 

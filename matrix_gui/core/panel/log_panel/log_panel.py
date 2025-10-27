@@ -3,7 +3,8 @@ from PyQt6.QtGui import QFont, QTextCursor
 from PyQt6.QtCore import QTimer, pyqtSignal
 from PyQt6.QtGui import QTextCharFormat, QColor
 from matrix_gui.core.emit_gui_exception_log import emit_gui_exception_log
-
+from matrix_gui.core.utils.threaded_timer import ThreadedTimer
+from collections import deque
 CHUNK_SIZE = 200
 
 class LogPanel(QPlainTextEdit):
@@ -11,7 +12,8 @@ class LogPanel(QPlainTextEdit):
 
     def __init__(self, bus, parent=None):
         super().__init__(parent)
-
+        self.refresh_timer = ThreadedTimer(100)
+        self.refresh_timer.tick.connect(self._refresh_logs)
         try:
             self.bus = bus
             self.setReadOnly(True)
@@ -19,55 +21,63 @@ class LogPanel(QPlainTextEdit):
             self.setLineWrapMode(QPlainTextEdit.LineWrapMode.NoWrap)     # no wrapping
 
             self._line_count = 0
-            self._pending_lines = []
+            self._pending_lines = deque()
 
             # timer for safe batch flush
             self._flush_timer = QTimer(self)
             self._flush_timer.timeout.connect(self._flush_lines)
+            self._flush_timer.start(50)  # 30ms is smooth for logs, but you can tune
         except Exception as e:
             emit_gui_exception_log("log_panel.__init__", e)
+
+    def _refresh_logs(self):
+        """Background tick: triggers GUI flush."""
+        try:
+            self._flush_lines()
+        except Exception as e:
+            emit_gui_exception_log("LogPanel._refresh_logs", e)
 
     def append_log_lines(self, lines):
         if not lines:
             return
-        print(f"[LOGPANEL] Queued {len(lines)} lines")
         self._pending_lines.extend(lines)
-        if not self._flush_timer.isActive():
-            QTimer.singleShot(0, self._flush_lines)
 
     def _append_colored_line(self, line: str):
-        fmt = QTextCharFormat()
-        if "[ERROR]" in line:
-            fmt.setForeground(QColor("red"))
-        elif "[WARN" in line or "[WARNING]" in line:
-            fmt.setForeground(QColor("orange"))
-        elif "[INFO]" in line:
-            fmt.setForeground(QColor("green"))
-        else:
-            fmt.setForeground(QColor("gray"))
 
-        cursor = self.textCursor()
-        cursor.movePosition(QTextCursor.MoveOperation.End)
-        cursor.insertText(line + "\n", fmt)
+        try:
+
+            fmt = QTextCharFormat()
+            if "[ERROR]" in line:
+                fmt.setForeground(QColor("red"))
+            elif "[WARN" in line or "[WARNING]" in line:
+                fmt.setForeground(QColor("orange"))
+            elif "[INFO]" in line:
+                fmt.setForeground(QColor("green"))
+            else:
+                fmt.setForeground(QColor("gray"))
+
+            cursor = self.textCursor()
+            cursor.movePosition(QTextCursor.MoveOperation.End)
+            cursor.insertText(line + "\n", fmt)
+        except Exception as e:
+            emit_gui_exception_log("LogPanel._flush_lines", e)
 
     def _flush_lines(self):
-        if not self._pending_lines:
-            return
-        chunk = self._pending_lines[:CHUNK_SIZE]
-        self._pending_lines = self._pending_lines[CHUNK_SIZE:]
-        print(f"[LOGPANEL] Flushing {len(chunk)} lines")
 
-        for line in chunk:
-            self._append_colored_line(str(line))
+        try:
+            count = 0
+            while self._pending_lines and count < CHUNK_SIZE:
+                line = self._pending_lines.popleft()
+                self._append_colored_line(str(line))
+                count += 1
 
-        self._line_count += len(chunk)
-        self.line_count_changed.emit(self._line_count)
-
-        self.moveCursor(QTextCursor.MoveOperation.End)
-        self.ensureCursorVisible()
-
-        if self._pending_lines:
-            self._flush_timer.start(30)
+            if count > 0:
+                self._line_count += count
+                self.line_count_changed.emit(self._line_count)
+                self.moveCursor(QTextCursor.MoveOperation.End)
+                self.ensureCursorVisible()
+        except Exception as e:
+            emit_gui_exception_log("LogPanel._flush_lines", e)
 
     def handle_log_update(self, token, lines, paused: bool):
         try:

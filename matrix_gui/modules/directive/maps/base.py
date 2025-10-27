@@ -7,6 +7,14 @@ CERT_INJECTION_MAP = {
         },
         "include_serial": True
     },
+    "symmetric_encryption": {
+        "target": ["config", "security", "symmetric_encryption"],
+        "fields": {
+            "key": None,
+            "type": "aes"
+        },
+        "include_serial": False
+    },
     "connection_cert": {
         "target": ["config", "security", "connection"],
         "fields": {

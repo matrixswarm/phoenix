@@ -85,10 +85,9 @@ class InboundDispatcher:
 
             # === 3. Emit Verified Events ===
             handler = verified_payload.get("handler")
-            scoped_handler = f"{handler}.{session_id}"
 
-            EventBus.emit(
-                f"inbound.verified.{scoped_handler}",
+            self.bus.emit(
+                f"inbound.verified.{handler}",
                 session_id=session_id,
                 channel=channel,
                 source=source,
@@ -96,7 +95,7 @@ class InboundDispatcher:
                 ts=ts,
             )
 
-            print(f"emmited: inbound.verified.{scoped_handler}")
+            print(f"emmited: inbound.verified.{handler}")
 
         except Exception as e:
             print(f"[INBOUND] ❌ Verification/decrypt failed: {e}")

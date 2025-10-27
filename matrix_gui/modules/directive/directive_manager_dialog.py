@@ -24,11 +24,10 @@ from matrix_gui.modules.directive.deployment.helper.mint_deployment_metadata imp
 
 from matrix_gui.core.emit_gui_exception_log import emit_gui_exception_log
 from PyQt6.QtWidgets import QInputDialog
-from matrix_gui.modules.vault.crypto.cert_utils import set_hash_bang
 from PyQt6.QtWidgets import QListWidget, QPushButton, QTextEdit, QLabel
 from matrix_gui.modules.vault.crypto.deploy_tools import write_encrypted_bundle_to_file
 from matrix_gui.util.resolve_matrixswarm_base import resolve_matrixswarm_base
-from matrix_gui.modules.directive.deployment.wrapper import agent_aggregator_wrapper, agent_connection_wrapper, agent_cert_wrapper, agent_directive_wrapper , agent_signing_cert_wrapper
+from matrix_gui.modules.directive.deployment.wrapper import agent_aggregator_wrapper, agent_connection_wrapper, agent_cert_wrapper, agent_directive_wrapper , agent_signing_cert_wrapper, agent_symmetric_encryption_wrapper
 
 class DirectiveManagerDialog(QDialog):
     vault_updated = QtCore.pyqtSignal(dict)
@@ -476,6 +475,10 @@ class DirectiveManagerDialog(QDialog):
             #inject signing keys
             EventBus.emit("crypto.service.signing_cert.injector", wrapped_agents)
 
+            wrapped_agents = agent_symmetric_encryption_wrapper(agent_aggregator)
+            # inject signing keys
+            EventBus.emit("crypto.service.symmetric_encryption.injector", wrapped_agents)
+
             wrapped_agents = agent_directive_wrapper(agent_aggregator)
 
             # step 5. Mint the final runtime directive (from template + deployment)
@@ -520,8 +523,6 @@ class DirectiveManagerDialog(QDialog):
             with open(key_path, "w", encoding="utf-8") as f:
                 f.write(base64.b64encode(aes_key).decode())
             os.chmod(key_path, 0o600)
-
-            write_encrypted_bundle_to_file(bundle, out_path)
 
             # step 10. Update deployment record in the vault with encryption details
             with open(out_path, "rb") as f:
