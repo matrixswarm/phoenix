@@ -23,7 +23,7 @@ class LogWatcher(PhoenixPanelInterface):
             self._connect_signals()
             self._pending_digest = []
             self._last_token = None
-            self._pending_lines = deque(maxlen=500)  # or whatever depth makes sense
+            self._pending_lines = deque()  # or whatever depth makes sense
             self._flush_timer = QTimer(self)
             self._flush_timer.timeout.connect(self._flush_output)
             self._flush_timer.start(200)  # flush every 200 ms
@@ -152,11 +152,15 @@ class LogWatcher(PhoenixPanelInterface):
         super().closeEvent(ev)
 
     def _handle_output(self, session_id, channel, source, payload, **_):
-        content = payload.get("content", {})
+
+        content = payload.get("content", payload)
         lines = content.get("lines", [])
         token = content.get("token")
-        # basic guards
-        if not lines or (self._last_token and token != self._last_token):
+
+        if not lines:
+            return
+        if self._last_token and token and not token.startswith(self._last_token[:8]):
+            print("[DEBUG] Skipping stale digest packet")
             return
         if not self.isVisible():
             return

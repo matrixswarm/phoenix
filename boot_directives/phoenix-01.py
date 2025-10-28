@@ -481,8 +481,9 @@ matrix_directive = {
                     "role": ["logwatch.generate.digest@cmd_generate_system_log_digest"],
                 }],
                 "collectors": {
-                    "httpd": { "paths": ["/var/log/httpd/error_log"], "rotate_depth": 1, "max_lines": 1000 },
-                    "sshd": { "paths": ["/var/log/secure"], "rotate_depth": 1, "max_lines": 1000 },
+                    "httpd": { "paths": ["/var/log/httpd/error_log", "/var/log/httpd/dragoart_error.log", "/var/log/httpd/matrixswarm_error.log"], "rotate_depth": 1, "max_lines": 500 },
+                    "mod_secure": { "paths": ["/var/log/httpd"], "rotate_depth": 1, "max_lines": 500 },
+                    "sshd": { "paths": ["/var/log/secure"], "rotate_depth": 1, "max_lines": 500 },
                     "fail2ban": { "paths": ["/var/log/fail2ban.log"], "rotate_depth": 1, "max_lines": 500 },
                     "systemd": { "paths": ["/var/log/messages"], "rotate_depth": 1, "max_lines": 500 },
                     "postfix": { "paths": ["/var/log/maillog"], "rotate_depth": 1, "max_lines": 500 },
