@@ -36,15 +36,21 @@ class Gameboard(PhoenixPanelInterface):
         except Exception as e:
             emit_gui_exception_log("Gameboard.__init__", e)
 
+    # --- Required abstract methods from PhoenixPanelInterface ---
     def _connect_signals(self):
-        if getattr(self, "_signals_connected", False):
-            return
-        scoped_handler = f"inbound.verified.npc_simulator.gameboard.response"
-        self.bus.on(scoped_handler, self._handle_gameboard_response)
-        self._signals_connected = True
-        print(f"[GAMEBOARD] 🎧 Listening on {scoped_handler}")
+        """Attach bus listener for NPC simulator responses."""
+        try:
+            if getattr(self, "_signals_connected", False):
+                return
+            scoped_handler = "inbound.verified.npc_simulator.gameboard.response"
+            self.bus.on(scoped_handler, self._handle_gameboard_response)
+            self._signals_connected = True
+            print(f"[GAMEBOARD] 🎧 Connected to {scoped_handler}")
+        except Exception as e:
+            emit_gui_exception_log("Gameboard._connect_signals", e)
 
     def _disconnect_signals(self):
+        """Detach bus listener and clear pending frame queue."""
         try:
             if not getattr(self, "_signals_connected", False):
                 return
@@ -52,19 +58,27 @@ class Gameboard(PhoenixPanelInterface):
             if hasattr(self, "bus") and self.bus:
                 self.bus.off(scoped_handler, self._handle_gameboard_response)
             self._signals_connected = False
-            print(f"[GAMEBOARD] ❌ Disconnected from {scoped_handler}")
+            self._frame_queue.clear()
+            print(f"[GAMEBOARD] 🔕 Disconnected from {scoped_handler}")
         except Exception as e:
-            print(f"[GAMEBOARD][WARN] disconnect failed: {e}")
+            emit_gui_exception_log("Gameboard._disconnect_signals", e)
 
     def get_panel_buttons(self):
+        """Return toolbar button for the NPC simulator panel."""
         return [
-            PanelButton("🎮", "NPC Panel", lambda: self.session_window.show_specialty_panel(self))
+            PanelButton("🎮", "NPC Panel",
+                        lambda: self.session_window.show_specialty_panel(self))
         ]
 
     def on_deployment_updated(self, deployment):
-        # optional: if gameboard needs to react to new deployment config
+        """React to deployment changes if relevant."""
         self.deployment = deployment
         print("[GAMEBOARD] 🔄 Deployment updated")
+
+    def _on_show(self):
+        """Optional: redraw grid when panel becomes visible."""
+        if getattr(self, "has_drawn", False):
+            self._update_grid(self.last_player_pos, self.last_npc_list)
 
 
     def _build_layout(self):

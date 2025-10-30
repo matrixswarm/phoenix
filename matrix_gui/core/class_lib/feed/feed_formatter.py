@@ -1,19 +1,21 @@
 import time
 class FeedFormatter:
     ICONS = {
-        "replace": "✅",
-        "delete": "☠️",
-        "restart": "🔁",
-        "warning": "⚠️",
-        "alert": "🚨",
         "info": "📰",
+        "warning": "⚠️",
+        "error": "❌",
+        "alert": "🚨",
+        "critical": "🟣",
+        "emergency": "🧯",
     }
 
     COLORS = {
-        "INFO": "green",
-        "WARN": "orange",
+        "INFO": "lightgreen",
+        "WARN": "#ffcc00",
         "ERROR": "red",
         "ALERT": "crimson",
+        "CRITICAL": "mediumorchid",
+        "EMERGENCY": "deeppink",
     }
 
     @staticmethod
@@ -25,8 +27,8 @@ class FeedFormatter:
         ts = event.get("timestamp", time.strftime("%Y-%m-%d %H:%M:%S"))
         level = event.get("level", "INFO").upper()
         etype = event.get("event_type", "info").lower()
-        icon = FeedFormatter.ICONS.get(etype, "❓")
-        color = FeedFormatter.COLORS.get(level, "#222")
+        icon = FeedFormatter.ICONS.get(etype.lower(), "❓")
+        color = FeedFormatter.COLORS.get(level.upper(), "#aaa")
 
         agent = event.get("agent", "?")
         status = event.get("status", "n/a")

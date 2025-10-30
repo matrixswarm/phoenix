@@ -1,7 +1,10 @@
-import json, time
-from PyQt6.QtWidgets import QWidget, QVBoxLayout, QTextEdit, QGroupBox
+# Authored by Daniel F MacDonald and ChatGPT-5 aka The Generals
+import json, time, hashlib, platform, winsound, subprocess, threading, os
+from pathlib import Path
+from PyQt6.QtWidgets import QWidget, QVBoxLayout, QTextEdit, QGroupBox, QComboBox, QCheckBox, QHBoxLayout, QLabel
 from matrix_gui.core.class_lib.feed.feed_formatter import FeedFormatter
 from PyQt6.QtWidgets import QTreeWidget, QTreeWidgetItem, QMenu
+
 from PyQt6.QtCore import Qt
 from matrix_gui.core.emit_gui_exception_log import emit_gui_exception_log
 from matrix_gui.core.event_bus import EventBus
@@ -29,6 +32,23 @@ class PhoenixStaticPanel(QWidget):
         self.deployment_tree.customContextMenuRequested.connect(self._on_deployment_context_menu)
         layout.addWidget(self.deployment_tree)
 
+        self._recent_alerts = {}  # message-hash → timestamp
+
+        # === Sound Controls ===
+        sound_box = QGroupBox("🔈 Alert Sound Settings")
+        sound_layout = QHBoxLayout()
+
+        self.play_sound_checkbox = QCheckBox("Play sound")
+        self.play_sound_checkbox.setChecked(True)
+
+        self.sound_dropdown = QComboBox()
+        self._populate_sound_list()
+
+        sound_layout.addWidget(QLabel("Sound:"))
+        sound_layout.addWidget(self.sound_dropdown, stretch=1)
+        sound_layout.addWidget(self.play_sound_checkbox)
+        sound_box.setLayout(sound_layout)
+        layout.addWidget(sound_box)
 
         self._refresh_deployment_summary()
 
@@ -78,22 +98,47 @@ class PhoenixStaticPanel(QWidget):
                     child = QTreeWidgetItem([f"{uid} ({proto}) {host}:{port}"])
                     dep_item.addChild(child)
         except Exception as e:
-            emit_gui_exception_log("PhoenixStaticPanel._on_connection_status", e)
+            emit_gui_exception_log("PhoenixStaticPanel._refresh_deployment_summary", e)
 
-    def _on_connection_status(self, session_id, channel, status, info, **_):
+    def handle_feed_event(self, event: dict):
+        """Routes incoming events from session processes to the feed."""
         try:
-            line = f"[{channel}] {status} :: sess={session_id} :: {info}"
-            self.feed.append(line)
-        except Exception as e:
-            emit_gui_exception_log("PhoenixStaticPanel._on_connection_status", e)
+            if not isinstance(event, dict):
+                print("[FEED][WARN] Non-dict event:", event)
+                return
 
-    def append_feed_event(self, event: dict):
+            payload = event.get("payload", {})
+            handler = payload.get("handler")
+
+            # Inject deployment/session from session_window
+            deployment = event.get("deployment", "unknown")
+            session_id = event.get("session_id", "unknown")
+
+            # If it’s an alert, go through _handle_swarm_alert()
+            if handler == "swarm_feed.alert":
+                # Merge context so alerts know their origin
+                payload["deployment"] = deployment
+                payload["session_id"] = session_id
+                self._handle_swarm_alert(payload)
+            else:
+                # Normal event → format directly
+                msg = FeedFormatter.format({
+                    "deployment": deployment,
+                    "session_id": session_id,
+                    **event
+                })
+                self.feed.append(msg)
+
+        except Exception as e:
+            emit_gui_exception_log("PhoenixStaticPanel.handle_feed_event", e)
+
+    def _append_feed_event(self, event: dict):
         """Append a formatted event to the Swarm Feed console."""
         try:
             msg = FeedFormatter.format(event)
             self.feed.append(msg)
         except Exception as e:
-            self.feed.append(f"[FEED][ERROR] Could not format event: {e}")
+            emit_gui_exception_log("PhoenixStaticPanel._append_feed_event", e)
 
     def _on_inbound_message(self, session_id: str, channel: str, source: str, payload: dict, ts: float, **_):
         try:
@@ -103,6 +148,76 @@ class PhoenixStaticPanel(QWidget):
             self.feed.append(line)
         except Exception as e:
             emit_gui_exception_log("PhoenixStaticPanel._on_inbound_message", e)
+
+    def _handle_swarm_alert(self, payload: dict):
+        """Handle alert packets with color, deduplication, and audio."""
+        try:
+
+            #print(f"{payload}")
+
+            content = payload.get("content", {}) or {}
+            msg = content.get("formatted_msg") or content.get("msg") or ""
+            if not msg:
+                return
+
+            level = content.get("level", "INFO").upper()
+            aliases = {
+                "CRIT": "CRITICAL", "CRITICAL": "CRITICAL",
+                "FATAL": "EMERGENCY", "SEVERE": "CRITICAL", "EMERG": "EMERGENCY",
+            }
+            level = aliases.get(level, level)
+
+            origin = content.get("origin", "unknown")
+            deployment = payload.get("deployment", "unknown")
+            session_id = payload.get("session_id", "unknown")
+
+            alert_id = content.get("id") or hashlib.md5(msg.encode()).hexdigest()
+            now = time.time()
+            if alert_id in self._recent_alerts and now - self._recent_alerts[alert_id] < 10:
+                return
+            self._recent_alerts[alert_id] = now
+
+            event = {
+                "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+                "event_type": "alert",
+                "agent": origin,
+                "details": msg,
+                "level": level,
+                "status": "active",
+                "deployment": deployment,
+                "session_id": session_id,
+            }
+
+            formatted = FeedFormatter.format(event)
+            self.feed.append(formatted + "<br>")
+
+            # --- play sound ---
+            self._play_alert_sound()
+
+        except Exception as e:
+            emit_gui_exception_log("PhoenixStaticPanel._handle_swarm_alert", e)
+
+    def _play_alert_sound(self):
+        """Play the selected WAV through the OS if checkbox is on."""
+        if not self.play_sound_checkbox.isChecked():
+            return
+
+        def _worker():
+            try:
+
+                sound_name = self.sound_dropdown.currentText()
+                sound_path = os.path.abspath(f"matrix_gui/resources/sounds/{sound_name}")
+                if platform.system() == "Windows":
+                    winsound.PlaySound(sound_path, winsound.SND_FILENAME | winsound.SND_ASYNC)
+                elif platform.system() == "Darwin":
+                    subprocess.Popen(["afplay", sound_path])
+                else:
+                    subprocess.Popen(["aplay", sound_path])
+            except Exception as e:
+                print(f"[ALERT-SOUND][ERROR] {e}")
+
+        threading.Thread(target=_worker, daemon=True).start()
+
 
     def _on_deployment_context_menu(self, pos):
 
@@ -122,6 +237,29 @@ class PhoenixStaticPanel(QWidget):
 
         except Exception as e:
             emit_gui_exception_log("PhoenixStaticPanel._on_deployment_context_menu", e)
+
+    def _populate_sound_list(self):
+        """Scan the sounds folder and fill the dropdown."""
+        try:
+            sound_dir = Path("matrix_gui/resources/sounds")
+            if not sound_dir.exists():
+                self.sound_dropdown.addItem("alert.wav")
+                return
+            files = sorted(
+                [p.name for p in sound_dir.glob("*.wav") if p.is_file()],
+                key=str.lower,
+            )
+            if not files:
+                self.sound_dropdown.addItem("alert.wav")
+                return
+            self.sound_dropdown.clear()
+            for f in files:
+                self.sound_dropdown.addItem(f)
+            # default selection
+            if "alert.wav" in files:
+                self.sound_dropdown.setCurrentText("alert.wav")
+        except Exception as e:
+            print(f"[SOUND][WARN] Could not populate sound list: {e}")
 
     def _connect_deployment(self, data):
         try:

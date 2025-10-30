@@ -141,7 +141,4 @@ def destroy_session(session_id):
     # --- 3. Clear the session bus ---
     if hasattr(ctx, "bus"):
         ctx.bus.clear()
-
-    # --- 4. Drop from manager ---
-    get_sessions().remove(session_id)
-    print(f"[DESTROY] Session {session_id} completely removed.")
+        print(f"[DESTROY] closing down buses.")

@@ -62,7 +62,6 @@ class RestartAgentPanel(QObject):
         """
         try:
 
-            print(f"{payload}")
             content = payload.get("content", {})
             uid = content.get("universal_id", "unknown")
             stage = content.get("stage", "?")

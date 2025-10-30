@@ -229,6 +229,20 @@ class PhoenixCockpit(QMainWindow):
             idx = self.tab_stack.addTab(tab, label)
             self.tab_stack.setCurrentIndex(idx)
 
+            # Use direct reference, not index
+            self.session_processes.append({
+                "proc": p,
+                "conn": parent_conn,
+                "session_id": session_id,
+                "tab": tab,  # store the widget itself
+            })
+
+            layout.addWidget(container)
+
+            label = f"{deployment.get('label', 'session')} ▸ {session_id[:6]}"
+            idx = self.tab_stack.addTab(tab, label)
+            self.tab_stack.setCurrentIndex(idx)
+
             # Track process and IPC for cleanup
             self.session_processes.append({
                 "proc": p,
@@ -308,6 +322,10 @@ class PhoenixCockpit(QMainWindow):
 
     def _cleanup_session(self, sess, conn):
         try:
+            proc = sess.get("proc")
+            if proc and proc.is_alive():
+                proc.terminate()
+                proc.join(timeout=1)
             self.session_processes = [s for s in self.session_processes if s["conn"] != conn]
             self._active_sessions.discard(sess.get("session_id"))
             self.status_sessions.setText(f"Sessions: {len(self._active_sessions)}")
@@ -334,7 +352,7 @@ class PhoenixCockpit(QMainWindow):
                     print("[MIRV][WARN] swarm_feed message missing event dict:", msg)
                     return
                 if self.static_panel:
-                    self.static_panel.append_feed_event(event)
+                    self.static_panel.handle_feed_event(event)
 
             elif mtype == "vault_update_request":
                 dep = msg.get("deployment")
@@ -761,33 +779,46 @@ class PhoenixCockpit(QMainWindow):
 
     def _on_tab_close_requested(self, index: int):
         try:
-            # Find the matching session record
-            sess = next((s for s in self.session_processes if s.get("tab_index") == index), None)
+            tab = self.tab_stack.widget(index)
+            if not tab:
+                return
+
+            # Find the session that owns this exact tab widget
+            sess = next((s for s in self.session_processes if s.get("tab") == tab), None)
             if not sess:
                 self.tab_stack.removeTab(index)
                 return
 
-            conn, proc, sid = sess["conn"], sess["proc"], sess["session_id"]
+            conn = sess.get("conn")
+            proc = sess.get("proc")
+            sid = sess.get("session_id")
 
-            try:
-                # Give the session a chance to exit gracefully
-                conn.send({"type": "exit"})
-            except Exception:
-                pass
+            # --- Tell session to close ---
+            if conn:
+                try:
+                    conn.send({"type": "force_close"})
+                    print(f"[MIRV] 🔻 Sent force_close to {sid}")
+                    # give the subprocess a moment to react
+                    wait_start = time.time()
+                    while proc.is_alive() and time.time() - wait_start < 1.5:
+                        QApplication.processEvents()
+                        time.sleep(0.05)
+                except Exception as e:
+                    print(f"[MIRV][WARN] Failed to send force_close to {sid}: {e}")
 
-            # Kill if needed
-            if proc.is_alive():
-                proc.terminate()
-
-            # Remove the tab and bookkeeping
+            # --- Remove the tab safely ---
             self.tab_stack.removeTab(index)
+
+            # --- Kill process if still alive ---
+            if proc and proc.is_alive():
+                proc.terminate()
+                proc.join(timeout=2)
+
+            # --- Cleanup bookkeeping ---
+            self.session_processes = [s for s in self.session_processes if s is not sess]
             self._active_sessions.discard(sid)
             self.status_sessions.setText(f"Sessions: {len(self._active_sessions)}")
-
-            # Drop the session record
-            self.session_processes = [s for s in self.session_processes if s is not sess]
-
-            print(f"[MIRV] 🧹 Closed session {sid}")
+            print(f"[MIRV] 🧹 Cleaned up session {sid}")
 
         except Exception as e:
             emit_gui_exception_log("PhoenixCockpit._on_tab_close_requested", e)

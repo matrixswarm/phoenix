@@ -85,16 +85,7 @@ def run_session(session_id, conn):
             ctx=ctx
         )
 
-        # Add QTimer for pipe polling
-        def poll_conn():
-            if conn.poll():
-                msg = conn.recv()
-                if msg.get("type") == "deployment_updated":
-                    win.handle_deployment_update(msg["deployment_id"], msg["deployment"])
-
-        timer = QTimer()
-        timer.timeout.connect(poll_conn)
-        timer.start(200)  # every 200 ms
+        win.start_pipe_timer()
 
         # make window embeddable and not auto-activate
         win.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.SubWindow)
@@ -198,6 +189,7 @@ class SessionWindow(QMainWindow):
             self.setWindowTitle(f"Matrix | deployment: {label} | session-id: {self.session_id}")
 
             # Events
+            self.bus.on(f"inbound.verified.swarm_feed.alert", self._handle_swarm_alert)
             self.bus.on("channel.status", self._handle_channel_status)
             self.bus.on(f"inbound.verified.agent_log_view.update", self._handle_log_update)
             self.bus.on("gui.agent.selected", self._handle_agent_selected)
@@ -205,6 +197,27 @@ class SessionWindow(QMainWindow):
 
         except Exception as e:
             emit_gui_exception_log("session_window.__init__", e)
+
+    def start_pipe_timer(self):
+        self._pipe_timer = QTimer(self)
+        self._pipe_timer.timeout.connect(self._poll_conn)
+        self._pipe_timer.start(200)
+
+    def _poll_conn(self):
+        if not self.conn:
+            return
+        try:
+            while self.conn.poll():
+                msg = self.conn.recv()
+                mtype = msg.get("type")
+                if mtype == "deployment_updated":
+                    self.handle_deployment_update(msg["deployment_id"], msg["deployment"])
+                elif mtype == "force_close":
+                    print(f"[SESSION] 🧨 Received external close for {self.session_id}")
+                    self._handle_external_close()
+        except (EOFError, OSError):
+            print(f"[SESSION][PIPE] Lost pipe for {self.session_id}")
+            self._pipe_timer.stop()
 
     def _send_heartbeat(self):
         try:
@@ -214,8 +227,6 @@ class SessionWindow(QMainWindow):
             print("[SESSION][HEARTBEAT] Pipe lost; shutting down session.")
             self._hb_timer.stop()
             return
-
-
 
     def _set_active_log_token(self, session_id, token, agent_title=None, **_):
         try:
@@ -285,10 +296,12 @@ class SessionWindow(QMainWindow):
             self.control_bar.clear_secondary_buttons()
 
     def _load_custom_panel(self, panel_name, node):
+
         try:
+
             cache_key = panel_name
 
-            if cache_key in getattr(self, "_panel_cache", {}):
+            if cache_key in self._panel_cache:
                 return self._panel_cache[cache_key]
 
             mod_path, class_name = panel_name.rsplit(".", 1)
@@ -304,7 +317,7 @@ class SessionWindow(QMainWindow):
             PanelClass = getattr(mod, class_name)
             panel = PanelClass(session_id=self.session_id, bus=self.bus, node=node, session_window=self)
 
-            if getattr(PanelClass, "cache_panel", False):
+            if panel.is_cached():
                 self._panel_cache[cache_key] = panel
 
             return panel
@@ -584,15 +597,25 @@ class SessionWindow(QMainWindow):
 
     # --- Other unchanged methods ---
     def _send_cmd(self, cmd): pass
-    def _setup_status_bar(self):
 
+    def _setup_status_bar(self):
         try:
             status_bar = QToolBar("Session Status", self)
             status_bar.setMovable(False)
+
+            # Primary status label (already exists)
             status_bar.addWidget(self.status_label)
+
+            # Add session ID label to the right
+            self.session_id_label = QLabel(f"🆔 {self.session_id}")
+            self.session_id_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+            self.session_id_label.setStyleSheet("padding-left: 12px; color: gray;")
+            status_bar.addWidget(self.session_id_label)
+
             self.addToolBar(Qt.ToolBarArea.BottomToolBarArea, status_bar)
+
         except Exception as e:
-            emit_gui_exception_log("session_window._update_log_status_bar", e)
+            emit_gui_exception_log("session_window._setup_status_bar", e)
 
     def save_deployment_to_vault(self):
         try:
@@ -610,17 +633,44 @@ class SessionWindow(QMainWindow):
         try:
             self.deployment = deployment
 
-            if hasattr(self, "_panel_cache"):
+            for panel in self._panel_cache.values():
+                if hasattr(panel, "on_deployment_updated"):
+                    panel.on_deployment_updated(deployment)
 
-                for panel in self._panel_cache.values():
-                    if hasattr(panel, "on_deployment_updated"):
-                        panel.on_deployment_updated(deployment)
         except Exception as e:
             emit_gui_exception_log("SessionWindow.handle_deployment_update", e)
+
+    def _handle_swarm_alert(self, session_id, channel, source, payload, **_):
+        try:
+            if self.conn:
+
+                self.conn.send({"type": "swarm_feed" , "event": {"payload": payload, "session_id": self.session_id, "deployment": self.deployment.get("label", "unknown")}})
+
+        except Exception as e:
+            emit_gui_exception_log("SessionWindow._handle_swarm_alert", e)
+
+    def _handle_external_close(self):
+        """Called when cockpit sends {'type': 'force_close'} over the pipe."""
+        print(f"[SESSION] Received external close for {self.session_id}")
+        self.close()
 
     def closeEvent(self, event):
         print(f"[SESSION] {self.cockpit_id} closing, destroying session")
         try:
+
+            self.bus.off(f"inbound.verified.swarm_feed.alert", self._handle_swarm_alert)
+            self.bus.off("channel.status", self._handle_channel_status)
+            self.bus.off(f"inbound.verified.agent_log_view.update", self._handle_log_update)
+            self.bus.off("gui.agent.selected", self._handle_agent_selected)
+            self.bus.off("gui.log.token.updated", self._set_active_log_token)
+
+            for panel in self._panel_cache.values():
+                try:
+                    panel._disconnect_signals()
+                except Exception as e:
+                    print(f"[SESSION][CLEANUP] Failed to delete panel: {e}")
+            self._panel_cache.clear()
+
             if self.conn:
                 try:
                     self.conn.send({

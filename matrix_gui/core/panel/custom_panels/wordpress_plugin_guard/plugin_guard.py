@@ -98,6 +98,49 @@ class PluginGuard(PhoenixPanelInterface):
         except Exception as e:
             emit_gui_exception_log("PluginGuard._build_layout", e)
 
+    # --- Required abstract methods from PhoenixPanelInterface ---
+    def _connect_signals(self):
+        """Attach inbound signal for plugin guard updates."""
+        try:
+            scoped = "inbound.verified.plugin_guard.panel.update"
+            self.bus.on(scoped, self._queue_output)
+            print(f"[PLUGIN-GUARD] 🎧 Connected to {scoped}")
+            # After connecting, immediately sync status once
+            QTimer.singleShot(250, self._request_initial_status)
+        except Exception as e:
+            emit_gui_exception_log("PluginGuard._connect_signals", e)
+
+    def _disconnect_signals(self):
+        """Detach inbound signal and clear queued updates."""
+        try:
+            scoped = "inbound.verified.plugin_guard.panel.update"
+            self.bus.off(scoped, self._queue_output)
+            self._update_queue.clear()
+            print(f"[PLUGIN-GUARD] 🔕 Disconnected from {scoped}")
+        except Exception as e:
+            emit_gui_exception_log("PluginGuard._disconnect_signals", e)
+
+    def get_panel_buttons(self):
+        """Return toolbar button for the Plugin Guard panel."""
+        return [
+            PanelButton("🧹", "Plugin Guard",
+                        lambda: self.session_window.show_specialty_panel(self))
+        ]
+
+    def on_deployment_updated(self, deployment):
+        """Reload deployment info when parent session updates."""
+        try:
+            self.deployment = deployment
+            self._append_output("[DEPLOYMENT] 🔄 Deployment updated.")
+        except Exception as e:
+            emit_gui_exception_log("PluginGuard.on_deployment_updated", e)
+
+    def _on_show(self):
+        """Optional hook for when the panel becomes visible."""
+        # Immediately refresh button state and request status sync
+        QTimer.singleShot(200, self._sync_button_states)
+        print("[PLUGIN-GUARD] 🌐 Panel shown — refreshing status...")
+
     # === Button Actions ===
     def _show_plugins(self):
         self._send_service_request("plugin.guard.list_plugins",
@@ -257,17 +300,6 @@ class PluginGuard(PhoenixPanelInterface):
         self.bus.emit("outbound.message", session_id=self.session_id,
                       channel="outgoing.command", packet=pk)
 
-
-    # === Signal Handling ===
-    def _connect_signals(self):
-        try:
-            scoped = f"inbound.verified.plugin_guard.panel.update"
-            self.bus.on(scoped, self._queue_output)
-            # after connecting, immediately request current status
-            QTimer.singleShot(250, self._request_initial_status)
-        except Exception as e:
-            emit_gui_exception_log("PluginGuard._connect_signals", e)
-
     def _queue_output(self, session_id, channel, source, payload, **_):
         self._update_lock.lock()
         self._update_queue.append((session_id, channel, source, payload))
@@ -285,24 +317,10 @@ class PluginGuard(PhoenixPanelInterface):
         except Exception as e:
             emit_gui_exception_log("PluginGuard._drain_updates", e)
 
-    def _disconnect_signals(self):
-        try:
-            scoped = f"inbound.verified.plugin_guard.panel.update"
-            self.bus.off(scoped, self._safe_handle_output)
-        except Exception as e:
-            emit_gui_exception_log("PluginGuard._disconnect_signals", e)
-
     def _append_output(self, text):
         self.output_box.append(text)
         if self.auto_scroll:
             self.output_box.moveCursor(QTextCursor.MoveOperation.End)
-
-    def get_panel_buttons(self):
-        return [PanelButton("🧹", "Plugin Guard", lambda: self.session_window.show_specialty_panel(self))]
-
-    def on_deployment_updated(self, deployment):
-        self.deployment = deployment
-        self._append_output("[DEPLOYMENT] 🔄 Deployment updated.")
 
     def _approve_plugin(self, plugin):
         self._append_output(f"[DEBUG] Sending approve RPC for {plugin}")

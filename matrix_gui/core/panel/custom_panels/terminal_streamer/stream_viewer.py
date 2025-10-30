@@ -109,6 +109,48 @@ class StreamViewer(PhoenixPanelInterface):
         except Exception as e:
             emit_gui_exception_log("StreamViewer._build_layout", e)
 
+    # --- Required abstract methods from PhoenixPanelInterface ---
+    def _connect_signals(self):
+        """Attach bus listener for terminal stream updates."""
+        try:
+            scoped = "inbound.verified.terminal_panel.update"
+            self.bus.on(scoped, self._handle_output)
+            print(f"[STREAM] 🎧 Connected to {scoped}")
+        except Exception as e:
+            emit_gui_exception_log("StreamViewer._connect_signals", e)
+
+    def _disconnect_signals(self):
+        """Detach bus listener and clear any buffered outputs."""
+        try:
+            scoped = "inbound.verified.terminal_panel.update"
+            self.bus.off(scoped, self._handle_output)
+            print(f"[STREAM] 🔕 Disconnected from {scoped}")
+            self._pending_outputs.clear()
+        except Exception as e:
+            emit_gui_exception_log("StreamViewer._disconnect_signals", e)
+
+    def get_panel_buttons(self):
+        """Return toolbar button for terminal viewer panel."""
+        return [
+            PanelButton("🖥️", "Terminal",
+                        lambda: self.session_window.show_specialty_panel(self))
+        ]
+
+    def on_deployment_updated(self, deployment):
+        """Reload favorites when deployment data changes."""
+        try:
+            self.deployment = deployment
+            self.favorites = deployment.get("terminal_favorites", [])
+            self._refresh_fav_list()
+            print("[STREAM] 🔄 Deployment updated (favorites reloaded)")
+        except Exception as e:
+            emit_gui_exception_log("StreamViewer.on_deployment_updated", e)
+
+    def _on_show(self):
+        """Optional hook for when the panel becomes visible."""
+        # Reassert keyboard focus on show
+        QTimer.singleShot(0, self.cmd_input.setFocus)
+
     # --- Focus + Activation ---
     def event(self, e):
         if e.type() in (e.Type.WindowActivate, e.Type.FocusIn):
@@ -151,14 +193,6 @@ class StreamViewer(PhoenixPanelInterface):
             self._refresh_fav_list()
         except Exception as e:
             emit_gui_exception_log("StreamViewer._add_to_favorites", e)
-
-    def on_deployment_updated(self, deployment):
-        try:
-            self.deployment = deployment
-            self.favorites = deployment.get("terminal_favorites", [])
-            self._refresh_fav_list()
-        except Exception as e:
-            emit_gui_exception_log("StreamViewer.on_deployment_updated", e)
 
     def _populate_from_favorite(self, item):
         try:
@@ -242,22 +276,6 @@ class StreamViewer(PhoenixPanelInterface):
         except Exception as e:
             emit_gui_exception_log("StreamViewer._stop_command", e)
 
-    # --- Stream Output ---
-    def _connect_signals(self):
-        try:
-            scoped = f"inbound.verified.terminal_panel.update"
-            self.bus.on(scoped, self._handle_output)
-        except Exception as e:
-            emit_gui_exception_log("StreamViewer._connect_signals", e)
-
-    def _disconnect_signals(self):
-        try:
-            scoped = f"inbound.verified.terminal_panel.update"
-            self.bus.off(scoped, self._handle_output)
-
-        except Exception as e:
-            emit_gui_exception_log("StreamViewer._disconnect_signals", e)
-
     def _handle_output(self, session_id, channel, source, payload, **_):
         try:
             if not payload:
@@ -307,10 +325,6 @@ class StreamViewer(PhoenixPanelInterface):
             self.output_box.clear()
         except Exception as e:
             emit_gui_exception_log("StreamViewer._clear_output", e)
-
-    def get_panel_buttons(self):
-        return [PanelButton("🖥️", "Terminal",
-                            lambda: self.session_window.show_specialty_panel(self))]
 
     def _list_allowed(self):
 
