@@ -1,4 +1,6 @@
+from copy import deepcopy
 from matrix_gui.core.emit_gui_exception_log import emit_gui_exception_log
+from matrix_gui.modules.directive.maps.base import CERT_INJECTION_MAP
 
 def mint_directive_for_deployment(template_directive: dict, wrapped_agents: list, deployment_id: str) -> dict:
     """
@@ -6,9 +8,6 @@ def mint_directive_for_deployment(template_directive: dict, wrapped_agents: list
     using tag-driven mapping rules declared in CERT_INJECTION_MAP.
     If a config already exists in the template, merge into it instead of overwriting.
     """
-    from copy import deepcopy
-    from matrix_gui.modules.directive.maps.base import CERT_INJECTION_MAP
-
     agent_map = {w.uid(): w for w in wrapped_agents}
 
     def set_nested(obj, path: list, key, value):
@@ -106,10 +105,6 @@ def mint_directive_for_deployment(template_directive: dict, wrapped_agents: list
                     for key, val in sym.items():
                         if val is not None:
                             sym_node[key] = val
-                            #print(f"  → {key}: {val[:12] + '...'}" if isinstance(val, str) else f"  → {key}: {val}")
-
-                    # Optional: diagnostic preview
-                    #print(json.dumps(config.get("security", {}), indent=2))
 
                 elif tag_name == "connection_cert":
                     target_path = tag_info["target"]
@@ -123,25 +118,41 @@ def mint_directive_for_deployment(template_directive: dict, wrapped_agents: list
                                 if val:
                                     set_nested(node, target_path + [cert_block], field, val)
 
+
                 elif tag_name == "connection":
+
                     proto = tag_data.get("proto")
                     if not proto:
                         continue
+
                     conn_rules = tag_info.get(proto)
                     if not conn_rules:
                         continue
+
                     target_path = conn_rules.get("target", [])
-                    # Pull from organized connection_info if present
                     conn_info = wrapper.agent.get_item("connection_info") or {}
                     conn_details = conn_info.get("details", {})
+                    # --- Special case: EMAIL ---
+
+                    if proto == "email":
+                        # Determine direction mode
+                        direction = tag_data.get("direction", "outgoing")
+                        if isinstance(direction, dict):
+                            # Support legacy {"outgoing": True, "incoming": False}
+                            direction = "outgoing" if direction.get("outgoing") else "incoming"
+
+                        direction_fields = conn_rules.get(direction, {}).get("fields", [])
+                        for field in direction_fields:
+                            val = conn_details.get(field) or tag_data.get(field)
+                            if val is not None:
+                                set_nested(node, target_path, field, val)
+                        continue
+
+                    # --- Standard protocols (https, wss, discord, etc.) ---
                     for field in conn_rules.get("fields", []):
                         val = conn_details.get(field) or tag_data.get(field)
                         if val is not None:
                             set_nested(node, target_path, field, val)
-
-            #sec_tag = wrapper.get_security_tag()
-            #if sec_tag:
-            #    node["security-tag"] = sec_tag
 
             for child in node.get("children", []):
                 patch_node_in_place(child)

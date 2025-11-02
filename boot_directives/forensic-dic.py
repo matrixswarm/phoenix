@@ -134,8 +134,8 @@ matrix_directive = {
 
 
             {
-            "universal_id": "log_sentinel",
-            "name": "log_sentinel",
+            "universal_id": "log_streamer",
+            "name": "log_streamer",
             "tags": {
                 "packet_signing": {
                     "in": True,

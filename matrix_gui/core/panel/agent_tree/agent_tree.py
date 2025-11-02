@@ -151,20 +151,46 @@ class PhoenixAgentTree(QWidget):
 
     def _render_tree_safe(self, payload, **_):
         try:
+            # Save selected UID before refresh
+            current_item = self.tree.currentItem()
+            selected_uid = None
+            if current_item:
+                node = current_item.data(0, Qt.ItemDataRole.UserRole)
+                selected_uid = node.get("universal_id") if isinstance(node, dict) else None
 
+            # --- normal rebuild ---
             content = payload.get("content", {})
-
             if isinstance(content, dict):
                 self._rendered_tree_root = content
-
             self._last_tree_update_ts = time.time()
             self._render_tree(content)
             self._update_status_label()
 
+            # --- restore selection after event loop flush ---
+            if selected_uid:
+                QTimer.singleShot(0, lambda uid=selected_uid: self._restore_selection(uid))
+
             QTimer.singleShot(0, self.tree.expandAll)
 
         except Exception as e:
-            emit_gui_exception_log("PhoenixAgentTree._handle_tree_update", e)
+            emit_gui_exception_log("PhoenixAgentTree._render_tree_safe", e)
+
+    def _restore_selection(self, uid):
+        """Locate the item with matching UID and reselect it."""
+
+        def recurse(item):
+            node = item.data(0, Qt.ItemDataRole.UserRole)
+            if isinstance(node, dict) and node.get("universal_id") == uid:
+                self.tree.setCurrentItem(item)
+                return True
+            for i in range(item.childCount()):
+                if recurse(item.child(i)):
+                    return True
+            return False
+
+        for i in range(self.tree.topLevelItemCount()):
+            if recurse(self.tree.topLevelItem(i)):
+                break
 
     def _update_status_label(self):
         try:

@@ -1,3 +1,31 @@
+"""
+Module: Swarm Directive Encryption
+
+This module provides tools for handling encryption, decryption, and management of directives within a secure swarm deployment system.
+It utilizes AES encryption (GCM mode) for data security and supports embedding agent sources and generating cryptographic keypairs
+for managed directives.
+
+The module includes utilities for:
+    - Generating secure AES keys.
+    - Encrypting and decrypting data.
+    - Embedding agent sources in directives.
+    - Generating cryptographic keypairs dynamically.
+    - Verifying integrity of directives using SHA-256.
+
+---
+
+Functions:
+    - get_random_aes_key: Generates a random AES key of configurable length.
+    - encrypt_data: Encrypts data using AES-GCM encryption with a randomly generated nonce.
+    - embed_keypair_if_marker: Dynamically generates RSA keypairs to replace specific placeholders in a directive.
+    - generate_swarm_encrypted_directive: Generates a swarm directive with optional agent embedding and cryptographic hashbang.
+    - decrypt_swarm_encrypted_directive: Decrypts an encrypted swarm directive using a base64 swarm AES key.
+    - write_encrypted_bundle_to_file: Saves an encrypted directive bundle to a file in JSON format.
+
+---
+
+Function Documentation:
+"""
 import os
 import json
 import base64

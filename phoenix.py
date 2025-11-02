@@ -1,4 +1,24 @@
 # Authored by Daniel F MacDonald and ChatGPT-5 aka The Generals
+"""
+Module: Phoenix Cockpit
+
+Provides the main interface and control framework for managing sessions, vaults, and deployments within the application.
+The module includes the `PhoenixCockpit` class, which orchestrates operations such as session management, vault unlocking,
+tab navigation, and deployment processes. It also contains utility functions for displaying the application interface.
+
+Classes:
+    - PhoenixCockpit: Handles the primary logic and UI for controlling sessions, vaults, and deployments.
+
+Functions:
+    - show_with_splash: Displays the application with a splash screen.
+    - _launch: Launches the main cockpit application.
+
+Attributes:
+    - e, app, f: Global attributes relevant to the overall application state.
+
+---
+
+"""
 import sys, time
 print("Python:", sys.version)
 try:
@@ -107,9 +127,13 @@ class PhoenixCockpit(QMainWindow):
         self.tab_stack.tabCloseRequested.connect(self._on_tab_close_requested)
         self.main_layout.addWidget(self.tab_stack)
 
-        self.static_panel = PhoenixStaticPanel()
+        self.static_panel = PhoenixStaticPanel(
+            tab_widget=self.tab_stack,
+            tab_index=0
+        )
         self.static_panel.setObjectName("HomeTab")
         self.tab_stack.addTab(self.static_panel, " 🜂 Dashboard")
+        self.tab_stack.currentChanged.connect(self._on_tab_changed)
 
         self.tab_stack.tabBar().setTabButton(0, QTabBar.ButtonPosition.RightSide, None)
 
@@ -333,6 +357,12 @@ class PhoenixCockpit(QMainWindow):
         except Exception as e:
             print(f"[MIRV][WARN] Failed to cleanup session: {e}")
 
+    def _on_tab_changed(self, index):
+        widget = self.tab_stack.widget(index)
+        if isinstance(widget, PhoenixStaticPanel):
+            widget._has_unread_alert = False
+            widget._update_static_tab_indicator()
+
     def _handle_session_msg(self, msg, conn):
         """
         Handle messages coming back from session processes.
@@ -348,6 +378,7 @@ class PhoenixCockpit(QMainWindow):
 
             elif mtype == "swarm_feed":
                 event = msg.get("event")
+
                 if not event:
                     print("[MIRV][WARN] swarm_feed message missing event dict:", msg)
                     return
@@ -825,6 +856,14 @@ class PhoenixCockpit(QMainWindow):
 
 
 def show_with_splash(app, main_cls, delay=4000):
+    """
+    Displays the application with a splash screen during startup.
+
+    Steps:
+        1. Initializes the splash screen with a loading animation or progress information.
+        2. Boots the application's main cockpit interface.
+        3. Closes the splash screen after successful initialization.
+    """
     splash = PhoenixSplash()
     splash.show()
 
@@ -840,6 +879,12 @@ def show_with_splash(app, main_cls, delay=4000):
 
 
 def _launch(app, splash, main_cls):
+    """
+    Launches the main cockpit application object (`PhoenixCockpit`) and displays it to the user.
+
+    Returns:
+        PhoenixCockpit instance: The instance of the cockpit application being launched.
+    """
     splash.close()
     cockpit = main_cls()
     cockpit.show()

@@ -362,6 +362,30 @@ matrix_directive = {
             }
         },
         {
+            "universal_id": "email-dagger",
+            "name": "email_send",
+            "tags": {
+                "connection": {
+                    "proto": "email",
+                    "direction": {
+                        "outgoing": True
+                    }
+                },
+            },
+            "config": {
+                "ui": {
+                    "agent_tree": {"emoji": "📧"},
+                    "panel": [
+                        "email_send.email_send",
+                    ],
+                },
+                "service-manager": [{
+                    "role": ["hive.alert@cmd_send_alert_msg", "send_email.send@cmd_send_email"],
+                    "scope": ["parent", "any"],
+                }]
+            }
+        },
+        {
             "universal_id": "forensic-detective-1",
             "name": "forensic_detective",
             "config": {

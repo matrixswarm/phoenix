@@ -115,6 +115,45 @@ Matrix auto-resolves the directive + key, decrypts in memory, and spawns the age
 
 ---
 
+---
+
+### ⚠️ Minimum Requirements for Phoenix Connectivity
+
+Phoenix relies on **two critical relay agents** to establish communication
+between the GUI and your MatrixSwarm deployment:
+
+1. **Ingress Agent (`matrix_https`)**
+   * Receives signed packets from Phoenix over HTTPS (mTLS)
+   * Must be configured with a valid TLS certificate
+
+2. **Egress Agent (`matrix_websocket`)**
+   * Sends real-time updates and alerts back to Phoenix via WebSocket
+   * Must use the same certificate authority as `matrix_https`
+
+> 🛑 If your directive does **not** include both agents, Phoenix cannot launch a session.
+> The cockpit will refuse to connect until at least one ingress and one egress are detected.
+
+Minimum example snippet:
+
+```json
+{
+  "agents": [
+    { "name": "matrix_https", "universal_id": "matrix_https_1", "config": { ... } },
+    { "name": "matrix_websocket", "universal_id": "matrix_websocket_1", "config": { ... } }
+  ]
+}
+```
+
+Phoenix uses these channels as its communication backbone:
+```nginx
+Phoenix → matrix_https → Matrix → matrix_websocket → Phoenix
+```
+
+
+
+---
+
+
 ## Deploying a Swarm with Phoenix Cockpit
 
 Follow these steps to go from template → directive → encrypted swarm boot.
@@ -193,7 +232,7 @@ Matrix auto-resolves the directive + key, decrypts them in memory, and spawns th
 ✅ **Example Output**
 
 ```
-Directive: C:\Users\pete\PycharmProjects\phoenix_gui\boot_directives\zzzz.enc.json
+Directive: /matrix/boot_directives/zzzz.enc.json
 Swarm Key: /matrix/boot_directives/keys/zzzz.key
 ```
 

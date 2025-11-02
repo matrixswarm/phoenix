@@ -1,3 +1,4 @@
+# Authored by Daniel F MacDonald and ChatGPT-5 aka The Generals
 from PyQt6 import QtWidgets
 from PyQt6.QtWidgets import QMessageBox
 from PyQt6.QtWidgets import QAbstractItemView

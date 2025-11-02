@@ -1,11 +1,13 @@
 # Authored by Daniel F MacDonald and ChatGPT-5 aka The Generals
 import json, time, hashlib, platform, winsound, subprocess, threading, os
 from pathlib import Path
-from PyQt6.QtWidgets import QWidget, QVBoxLayout, QTextEdit, QGroupBox, QComboBox, QCheckBox, QHBoxLayout, QLabel
+from PyQt6.QtWidgets import QWidget, QVBoxLayout, QTextEdit, QGroupBox, QComboBox, QCheckBox, QHBoxLayout
 from matrix_gui.core.class_lib.feed.feed_formatter import FeedFormatter
 from PyQt6.QtWidgets import QTreeWidget, QTreeWidgetItem, QMenu
 
 from PyQt6.QtCore import Qt
+from PyQt6.QtWidgets import QLabel, QGraphicsDropShadowEffect
+from PyQt6.QtGui import QColor
 from matrix_gui.core.emit_gui_exception_log import emit_gui_exception_log
 from matrix_gui.core.event_bus import EventBus
 class PhoenixStaticPanel(QWidget):
@@ -16,7 +18,7 @@ class PhoenixStaticPanel(QWidget):
       - Swarm feed (ops console)
       - Quick ping box
     """
-    def __init__(self, vault_data=None, vault_path=None, parent=None):
+    def __init__(self, vault_data=None, vault_path=None,  parent=None, tab_widget=None, tab_index=None):
         super().__init__(parent)
         self.vault_data = vault_data or {}
         self.vault_path = vault_path
@@ -57,6 +59,11 @@ class PhoenixStaticPanel(QWidget):
         self.feed.setReadOnly(True)
         layout.addWidget(self.feed)
 
+        self.parent=parent
+        self.tab_widget = tab_widget
+        self.tab_index = tab_index
+        self._has_unread_alert = False
+        self._update_static_tab_indicator()
 
         # === Deployments summary ===
         deploy_box = QGroupBox("Deployments")
@@ -72,9 +79,6 @@ class PhoenixStaticPanel(QWidget):
         feed_box.setLayout(feed_layout)
         layout.addWidget(feed_box)
 
-        # === Wire EventBus ===
-        #EventBus.on("connection.status", self._on_connection_status)
-        #EventBus.on("inbound.verified", self._on_inbound_message)
 
     def _refresh_deployment_summary(self):
 
@@ -117,6 +121,8 @@ class PhoenixStaticPanel(QWidget):
             # If it’s an alert, go through _handle_swarm_alert()
             if handler == "swarm_feed.alert":
                 # Merge context so alerts know their origin
+                self._has_unread_alert = True
+                self._update_static_tab_indicator()
                 payload["deployment"] = deployment
                 payload["session_id"] = session_id
                 self._handle_swarm_alert(payload)
@@ -148,6 +154,19 @@ class PhoenixStaticPanel(QWidget):
             self.feed.append(line)
         except Exception as e:
             emit_gui_exception_log("PhoenixStaticPanel._on_inbound_message", e)
+
+    def _update_static_tab_indicator(self):
+        try:
+            if not self.tab_widget or self.tab_index is None:
+                return
+
+            label = "🜂 Dashboard" if not self._has_unread_alert else "🔺 Dashboard"
+            self.tab_widget.setTabText(self.tab_index, label)
+
+
+        except Exception as e:
+            emit_gui_exception_log("PhoenixStaticPanel._update_static_tab_indicator", e)
+
 
     def _handle_swarm_alert(self, payload: dict):
         """Handle alert packets with color, deduplication, and audio."""

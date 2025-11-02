@@ -83,23 +83,27 @@ QTabWidget::pane {
     background: #0f0f11;
 }
 QTabBar::tab {
-    background: #1b1b1d;
-    color: #aaa;
-    border: 1px solid #242427;
-    border-bottom: none;
-    border-top-left-radius: 6px;
-    border-top-right-radius: 6px;
+    background-color: #1e1e1e;
+    color: #f0f0f0;
     padding: 4px 12px;
-    margin-right: 2px;
-}
-QTabBar::tab:selected {
-    background: #0ae8b5;
-    color: #0b0b0b;
-    border-color: #0ae8b5;
+    border: 1px solid #333;
+    border-radius: 6px;  /* ← tighter, like your dashboard button */
+    margin: 2px;
     font-weight: bold;
+    min-height: 24px;
 }
+
+QTabBar::tab:selected {
+    background-color: #00d4aa;
+    color: black;
+    border-radius: 8px;
+    padding: 5px 14px;
+}
+
 QTabBar::tab:hover {
+    background-color: #2c2c2c;
     color: #fff;
+    border: 1px solid #555;
 }
 
 /* === Scrollbars === */
@@ -229,6 +233,19 @@ QGroupBox::title {
     left: 10px;
     padding: 0 4px;
     color: #0ae8b5;
+}
+
+/* === STATUS BAR CLEANUP === */
+QStatusBar {
+    background-color: #0d0d0d;
+    color: #d0d0d0;
+    border: none;
+}
+
+QStatusBar::item {
+    border: none;          /* removes the white divider */
+    background: transparent;
+    padding: 2px 8px;      /* optional – makes labels breathe */
 }
 
 /* The inner text/log areas */

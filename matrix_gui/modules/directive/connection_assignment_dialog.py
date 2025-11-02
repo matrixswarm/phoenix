@@ -2,6 +2,20 @@ from PyQt6.QtWidgets import QLabel, QComboBox, QPushButton, QVBoxLayout, QHBoxLa
 
 from matrix_gui.modules.directive.maps.base import CERT_INJECTION_MAP
 
+"""
+Module: Connection Assignment Dialog
+
+This module contains the `ConnectionAssignmentDialog` class, designed to facilitate the assignment of connections to a given resource or task. It includes functionality for validating row selection, managing connection state, and applying assignments based on user input.
+
+---
+
+Classes:
+    - ConnectionAssignmentDialog: A dialog for selecting and assigning connections.
+
+---
+
+class ConnectionAssignmentDialog:
+    """
 
 class ConnectionAssignmentDialog(QDialog):
     def __init__(self, parent, wrapped_agents, conn_mgr):
@@ -73,16 +87,34 @@ class ConnectionAssignmentDialog(QDialog):
         # Map-driven check
         connection_map = CERT_INJECTION_MAP.get("connection", {})
         if proto in connection_map:
-            required_fields = connection_map[proto].get("fields", [])
-            if isinstance(required_fields, dict):
-                # some entries may use dict style, flatten values
-                all_fields = []
-                for v in required_fields.values():
-                    all_fields.extend(v)
-                required_fields = all_fields
+            proto_map = connection_map[proto]
 
-            ok = all(conn.get(f) for f in required_fields) if required_fields else False
-            why = "ok" if ok else f"missing required: {', '.join(required_fields)}"
+            # --- EMAIL special case ---
+            if proto == "email":
+                outgoing_fields = proto_map.get("outgoing", {}).get("fields", [])
+                incoming_fields = proto_map.get("incoming", {}).get("fields", [])
+
+                has_outgoing = all(conn.get(f) for f in outgoing_fields)
+                has_incoming = all(conn.get(f) for f in incoming_fields)
+                ok = has_outgoing or has_incoming
+                why = (
+                    "ok (outgoing)"
+                    if has_outgoing
+                    else "ok (incoming)"
+                    if has_incoming
+                    else f"missing required: SMTP {outgoing_fields} / IMAP {incoming_fields}"
+                )
+            else:
+                # Normal protocols (flat list)
+                required_fields = proto_map.get("fields", [])
+                if isinstance(required_fields, dict):
+                    all_fields = []
+                    for v in required_fields.values():
+                        all_fields.extend(v)
+                    required_fields = all_fields
+
+                ok = all(conn.get(f) for f in required_fields) if required_fields else False
+                why = "ok" if ok else f"missing required: {', '.join(required_fields)}"
 
         lbl.setText("✅ resolved" if ok else "❌ unresolved")
         lbl.setToolTip(f"{proto}: {why}")

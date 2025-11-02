@@ -35,6 +35,15 @@ from matrix_gui.core.panel.control_bar import ControlBar
 
 
 def run_session(session_id, conn):
+    """
+    Executes a session, initializing its configurations, inter-process communication, and monitoring tools.
+
+    Parameters:
+        - Configuration data (varies depending on the implementation).
+
+    Returns:
+        - Session instance: The configured session object.
+    """
 
     app = QApplication.instance() or QApplication(sys.argv)
 
@@ -66,10 +75,37 @@ def run_session(session_id, conn):
 
         msg = conn.recv()
         deployment = copy.deepcopy(msg.get("deployment"))
+
+        # --- Preflight validation: require ingress + egress ---
+        try:
+            agents = [a.get("name", "").lower() for a in deployment.get("agents", [])]
+            missing = []
+            if "matrix_https" not in agents:
+                missing.append("matrix_https (ingress)")
+            if "matrix_websocket" not in agents:
+                missing.append("matrix_websocket (egress)")
+
+            if missing:
+                from PyQt6.QtWidgets import QMessageBox
+                msg_text = (
+                    "Phoenix requires at least one ingress and one egress agent to connect.\n\n"
+                    "Missing:\n - " + "\n - ".join(missing) +
+                    "\n\nAdd them to your directive before launching this session."
+                )
+                QMessageBox.critical(None, "Missing Core Agents", msg_text)
+                print(f"[SESSION][ABORT] Deployment missing core agents: {missing}")
+                return
+            else:
+                print("[SESSION][CHECK] ✅ Ingress/Egress agents detected.")
+        except Exception as e:
+            print(f"[SESSION][WARN] Preflight check failed: {e}")
+
         ctx = _connect_single(deployment, deployment.get("id"))
         inbound = InboundDispatcher(ctx.bus)
         outbound = OutboundDispatcher(ctx.bus, get_sessions(), deployment)
         ctx.inbound, ctx.outbound = inbound, outbound
+
+
 
         print(f"[DEBUG] Bus ID for session {session_id}: {id(ctx.bus)}")
 
@@ -120,7 +156,7 @@ class SessionWindow(QMainWindow):
         try:
 
             self.deployment_id=deployment_id
-
+            self.deployment = deployment
             self._hb_timer = QTimer(self)
             self._hb_timer.timeout.connect(self._send_heartbeat)
             self._hb_timer.start(2000)  # every 2 seconds
