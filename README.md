@@ -1,4 +1,6 @@
+
 ## Phoenix Cockpit
+[![Support on Ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/matrixswarm)
 Phoenix Cockpit is the GUI control plane for MatrixOS — a secure multi-agent runtime for orchestrating autonomous services.
 (from the MatrixSwarm ecosystem )
 
@@ -319,7 +321,6 @@ Your support helps fund new releases, documentation, and open-source maintenance
 across the entire **MatrixSwarm ecosystem**.
 
 ---
-
 
 ### Status
 
