@@ -306,6 +306,21 @@ Twitter/X: @matrixswarm
 Join the Swarm → [https://discord.gg/CyngHqDmku](https://discord.gg/CyngHqDmku)
 Report bugs, fork the swarm, or log your own Codex banner.
 
+---
+
+## 💙 Support Development
+
+If you find **Phoenix Cockpit** or **MatrixOS** useful and want to support continued development,  
+you can buy me a coffee here:
+
+☕ **[ko-fi.com/matrixswarm](https://ko-fi.com/matrixswarm)**
+
+Your support helps fund new releases, documentation, and open-source maintenance  
+across the entire **MatrixSwarm ecosystem**.
+
+---
+
+
 ### Status
 
 Pre-release.
