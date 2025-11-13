@@ -1,39 +1,34 @@
 
 ## Phoenix Cockpit
-### 🚪 Access Locked — Vault Closed
-
-All updates, bugfixes, and tools are being withheld.  
-No uploads. No pushes. No releases. Not until the unlock hits.
-
-You don’t get the real Coke until it’s paid for.  
-Newest editions in this drop include:
-
-- 💥 Full encrypted IMAP mailbox syncing (swarm-native)
-- 📥 Persistent, encrypted email storage under /matrix/universes/static/phoenix/latest/comm/<email_check>/mailbox/<mailbox_account>/cur/
-- 📤 SMTP email send from Phoenix to *any server* (on the fly)
-- other bug fixes
----
-
-## 🔓 Unlock the Drop
-
-When the goal is reached, everything drops.  
-Fixes. Additions. Features. Full stack.  
-
----
-
-## 🧃 Support the Unlock
-
-Want to accelerate the release?
-
-- [Ko-fi — Tip to unlock](https://ko-fi.com/matrixswarm)
-- Bitcoin — `bc1qasqk5xn9j7cdddmeclxddzvym2sdv7d8g3xrtz`
-
-> _Progress is being tracked privately. No public count._  
-> _No partial releases. No previews. No forks._
----
 
 Phoenix Cockpit is the GUI control plane for MatrixOS — a secure multi-agent runtime for orchestrating autonomous services.
 (from the MatrixSwarm ecosystem )
+
+---
+ 
+## Next drop includes:
+
+- Added 2AUTH to Swarm; 2AUTH panel added to retrieve and verify token 
+- Full encrypted IMAP mailbox syncing (swarm-native)
+- Persistent, encrypted email storage under /matrix/universes/static/phoenix/latest/comm/<email_check>/mailbox/<mailbox_account>/cur/
+- SMTP email send from Phoenix to *any server* (on the fly)
+- other bug fixes
+---
+
+## 💙 Support Development
+
+If you find **MatrixOS** or the broader **MatrixSwarm ecosystem** useful and want to support ongoing updates,  
+you can buy me a coffee here:
+
+☕ **[ko-fi.com/matrixswarm](https://ko-fi.com/matrixswarm)**
+
+Your support helps sustain development of MatrixOS, Phoenix Cockpit, and future agent frameworks —  
+funding open-source maintenance, documentation, and ecosystem growth.
+
+- Bitcoin — bc1qasqk5xn9j7cdddmeclxddzvym2sdv7d8g3xrtz
+
+---
+
 
 #### Built with PyQt6 ≥ 6.6
 #### Python ≥ 3.10 is required
