@@ -30,38 +30,33 @@ class LogWatcher(PhoenixPanelInterface):
             self._flush_timer = QTimer(self)
             self._flush_timer.timeout.connect(self._flush_output)
             self._flush_timer.start(200)
+            self._signals_connected = False
             self._timers.append(self._flush_timer)   # ⬅️ let the base class auto-clean it
         except Exception as e:
             emit_gui_exception_log("LogWatcher.__init__", e)
 
     # --- Required abstract methods from PhoenixPanelInterface ---
     def _connect_signals(self):
+
         """Attach bus listeners."""
         try:
-            scoped = "inbound.verified.logwatch_panel.update"
-            self.bus.on(scoped, self._handle_output)
-            print("[LOGWATCH] 🎧 Connected to", scoped)
+            if not self._signals_connected:
+                self._signals_connected=True
+                scoped = "inbound.verified.logwatch_panel.update"
+                self.bus.on(scoped, self._handle_output)
+                print("[LOGWATCH] 🎧 Connected to", scoped)
+
         except Exception as e:
             emit_gui_exception_log("LogWatcher._connect_signals", e)
 
     def _disconnect_signals(self):
         """Detach bus listeners and clear any buffered lines."""
-        try:
-            scoped = "inbound.verified.logwatch_panel.update"
-            self.bus.off(scoped, self._handle_output)
-            print("[LOGWATCH] 🔕 Disconnected from", scoped)
-            self._pending_lines.clear()
-        except Exception as e:
-            emit_gui_exception_log("LogWatcher._disconnect_signals", e)
+        pass
 
     def get_panel_buttons(self):
         """Provide toolbar buttons for this panel."""
         return [PanelButton("📜", "LogWatcher",
                 lambda: self.session_window.show_specialty_panel(self))]
-
-    def on_deployment_updated(self, deployment):
-        """Called when the parent session’s deployment changes."""
-        pass
 
     # --- UI construction ---
     def _build_layout(self):
@@ -91,7 +86,7 @@ class LogWatcher(PhoenixPanelInterface):
             bar.addWidget(cb)
             self.collector_checkboxes[name] = cb
 
-        self.oracle_cb = QCheckBox("🧠 Oracle Analysis")
+        self.oracle_cb = QCheckBox("Oracle Analysis")
         self.oracle_cb.setChecked(False)
         bar.addWidget(self.oracle_cb)
         layout.addLayout(bar)
@@ -106,7 +101,20 @@ class LogWatcher(PhoenixPanelInterface):
     # --- Event-specific overrides (optional hooks) ---
     def _on_show(self):
         """Reset digest token when shown."""
-        self._last_token = None
+        #self._last_token = None
+        pass
+
+    def _on_close(self):
+        if self._signals_connected:
+            try:
+                if self._signals_connected:
+                    scoped = "inbound.verified.logwatch_panel.update"
+                    self.bus.off(scoped, self._handle_output)
+                    print("[LOGWATCH] 🔕 Disconnected from", scoped)
+                    self._pending_lines.clear()
+            except Exception as e:
+                emit_gui_exception_log("LogWatcher._disconnect_signals", e)
+
 
     # --- Core logic ---
     def _on_generate_clicked(self):

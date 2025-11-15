@@ -19,7 +19,7 @@ Attributes:
 ---
 
 """
-import sys, time
+import sys, time, builtins, inspect, json, pprint
 print("Python:", sys.version)
 try:
     from PyQt6.QtCore import QT_VERSION_STR, PYQT_VERSION_STR
@@ -49,6 +49,29 @@ from matrix_gui.util.resolve_matrixswarm_base import resolve_matrixswarm_base
 from matrix_gui.core.panel.home.phoenix_static_panel import PhoenixStaticPanel
 from matrix_gui.config.boot.globals import get_sessions
 from matrix_gui.core.utils.ui_toast import show_toast
+
+# Define the debug function
+#Flip DEBUG_VISUAL to True only when you want it inside your GUI console.
+DEBUG_VISUAL = False
+
+def d(*variables, pretty=False, width=100):
+    frame = inspect.currentframe().f_back
+    var_names = frame.f_locals
+    output = []
+    for var in variables:
+        name = next((key for key, value in var_names.items() if value is var), repr(var))
+        if pretty:
+            try:
+                formatted = json.dumps(var, indent=2, ensure_ascii=False)
+            except Exception:
+                formatted = pprint.pformat(var, width=width, compact=False)
+            out = f"\n{name}:\n{formatted}\n"
+        else:
+            out = f"{name}: {var!r}"
+        output.append(out)
+    print("\n".join(output), file=sys.__stdout__)
+# make it global
+builtins.d = d
 
 class PhoenixCockpit(QMainWindow):
     def __init__(self):
@@ -385,39 +408,67 @@ class PhoenixCockpit(QMainWindow):
                 if self.static_panel:
                     self.static_panel.handle_feed_event(event)
 
-            elif mtype == "vault_update_request":
-                dep = msg.get("deployment")
-                dep_id = msg.get("deployment_id")
-                if not dep or not dep_id:
-                    print(f"[VAULT][WARN] vault_update_request missing fields: {msg}")
+            elif mtype == "vault.update.requested":
+
+                dep_id = msg.get("dep_id")
+                patch = msg.get("patch", {})
+
+                if not dep_id:
+                    print(f"[VAULT][WARN] vault.update.requested missing dep_id")
                     return
 
-                # Ensure vault_data structure exists
-                self.vault_data = self.vault_data or {}
-                self.vault_data.setdefault("deployments", {})
-
-                # Merge into vault_data under correct deployment ID
-                self.vault_data["deployments"][dep_id] = dep
-                print(f"[VAULT] Deployment {dep_id} updated from session")
-
-                # Save vault to disk
+                dep = self.vault_data["deployments"].setdefault(dep_id, {})
+                for k, v in patch.items():
+                    if isinstance(dep.get(k), dict) and isinstance(v, dict):
+                        dep[k].update(v)
+                    else:
+                        dep[k] = v
                 self._handle_vault_save(self.vault_data)
+                print(f"[VAULT] ✅ Applied patch for {dep_id}: {list(patch.keys())}")
 
 
+            elif mtype == "vault.query":
 
-                # Broadcast updated deployment to all sessions (including origin)
-                for sess in self.session_processes:
+                dep_id = msg.get("dep_id")
+                target = msg.get("target", "deployment")  # fallback handled safely here too
+
+                if not dep_id:
+                    print(f"[VAULT][WARN] vault.query missing dep_id: {msg}")
+                    return
+
+                # Select target branch dynamically
+                data = {}
+                try:
+
+                    if target == "deployment":
+                        data = (self.vault_data or {}).get("deployments", {}).get(dep_id, {})
+                    elif target == "connection_manager":
+                        data = (self.vault_data or {}).get("connection_manager", {})
+                    elif target == "vault":
+                        data = self.vault_data or {}
+                    else:
+                        print(f"[VAULT][WARN] Unknown vault.query target '{target}' — returning empty data.")
+                    resp = {
+                        "type": "vault.response",
+                        "dep_id": dep_id,
+                        "target": target,
+                        "data": data
+                    }
+                    conn.send(resp)
+                    print(f"[VAULT] 📤 Sent '{target}' snapshot for {dep_id} to session.")
+                except Exception as e:
+                    print(f"[VAULT][ERROR] Failed to build vault.response for {target}: {e}")
                     try:
-                        print(f"[VAULT][DEBUG] Sending update to {sess['session_id']} (pid={sess['proc'].pid})")
-                        #sess["conn"].send({
-                        #    "type": "deployment_updated",
-                        #    "deployment_id": dep_id,
-                        #    "deployment": dep,
-                        #})
-                        print(f"[VAULT] 🔄 Broadcasted update to session {sess['proc'].pid}")
-                    except Exception as e:
-                        print(f"[VAULT][WARN] Failed to forward deployment update to session {sess['session_id']}: {e}")
+                        conn.send({
+                            "type": "vault.response",
+                            "dep_id": dep_id,
+                            "target": target,
+                            "data": {},
+                            "error": str(e)
+                        })
 
+                    except Exception:
+                        pass
 
             elif mtype == "telemetry":
                 status = msg.get("status")
@@ -436,7 +487,6 @@ class PhoenixCockpit(QMainWindow):
                         sess["last_heartbeat"] = time.time()
                         break
                 return
-
 
             elif mtype == "register_cmd":
                 control = msg["control"]
@@ -875,7 +925,6 @@ def show_with_splash(app, main_cls, delay=4000):
         QTimer.singleShot(500, splash.deleteLater)
 
     QTimer.singleShot(delay, launch)
-
 
 
 def _launch(app, splash, main_cls):

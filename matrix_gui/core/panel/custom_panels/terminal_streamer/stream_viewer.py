@@ -12,6 +12,7 @@ from matrix_gui.core.class_lib.packet_delivery.packet.standard.command.packet im
 from matrix_gui.core.panel.control_bar import PanelButton
 from matrix_gui.core.emit_gui_exception_log import emit_gui_exception_log
 from matrix_gui.core.panel.custom_panels.interfaces.base_panel_interface import PhoenixPanelInterface
+from matrix_gui.modules.vault.services.vault_connection_singleton import VaultConnectionSingleton
 
 
 class StreamViewer(PhoenixPanelInterface):
@@ -132,19 +133,9 @@ class StreamViewer(PhoenixPanelInterface):
     def get_panel_buttons(self):
         """Return toolbar button for terminal viewer panel."""
         return [
-            PanelButton("🖥️", "Terminal",
-                        lambda: self.session_window.show_specialty_panel(self))
+            PanelButton("🖥️", "Terminal", lambda: self.session_window.show_specialty_panel(self))
         ]
 
-    def on_deployment_updated(self, deployment):
-        """Reload favorites when deployment data changes."""
-        try:
-            self.deployment = deployment
-            self.favorites = deployment.get("terminal_favorites", [])
-            self._refresh_fav_list()
-            print("[STREAM] 🔄 Deployment updated (favorites reloaded)")
-        except Exception as e:
-            emit_gui_exception_log("StreamViewer.on_deployment_updated", e)
 
     def _on_show(self):
         """Optional hook for when the panel becomes visible."""
@@ -186,11 +177,16 @@ class StreamViewer(PhoenixPanelInterface):
             refresh = self.refresh_input.text().strip() or "0"
             if not cmd:
                 return
+
             new_entry = {"cmd": cmd, "refresh": int(refresh)}
             self.favorites.append(new_entry)
-            self.session_window.deployment["terminal_favorites"] = self.favorites
-            self.session_window.save_deployment_to_vault()
+
+            # Use the vault singleton instead of direct deployment access
+            vault = VaultConnectionSingleton.get()
+            vault.update_field("terminal_favorites", self.favorites)
+
             self._refresh_fav_list()
+            print("[STREAM] ⭐ Favorite added and vault updated")
         except Exception as e:
             emit_gui_exception_log("StreamViewer._add_to_favorites", e)
 
@@ -208,9 +204,12 @@ class StreamViewer(PhoenixPanelInterface):
             row = self.fav_list.currentRow()
             if 0 <= row < len(self.favorites):
                 self.favorites.pop(row)
-                self.session_window.deployment["terminal_favorites"] = self.favorites
-                self.session_window.save_deployment_to_vault()
+
+                vault = VaultConnectionSingleton.get()
+                vault.update_field("terminal_favorites", self.favorites)
+
                 self._refresh_fav_list()
+                print("[STREAM] ❌ Favorite deleted and vault updated")
         except Exception as e:
             emit_gui_exception_log("StreamViewer._delete_favorite", e)
 

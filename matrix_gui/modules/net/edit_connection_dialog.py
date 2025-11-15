@@ -162,7 +162,7 @@ def edit_connection_dialog(parent, default_proto="https", data=None, conn_id=Non
                 fields["default_channel"] = channel_box
 
                 # serial row
-                serial_val = str((data or {}).get("serial") or uuid.uuid4().hex[:8])
+                serial_val = str((data or {}).get("serial") or uuid.uuid4().hex[:24])
                 serial_box = QLineEdit()
                 serial_box.setText(serial_val)
                 serial_box.setReadOnly(True)
@@ -188,7 +188,11 @@ def edit_connection_dialog(parent, default_proto="https", data=None, conn_id=Non
                     fields["smtp_encryption"] = smtp_encryption
                     fields["smtp_username"] = smtp_username
                     fields["smtp_password"] = smtp_password
-
+                    smtp_to = QLineEdit()
+                    if data:
+                        smtp_to.setText(str(data.get("smtp_to", "")))
+                    email_field_layout.addRow("To (default recipient)", smtp_to)
+                    fields["smtp_to"] = smtp_to
                 else:
                     # incoming mode
                     email_field_layout.addRow("Protocol", incoming_protocol)
@@ -278,7 +282,7 @@ def edit_connection_dialog(parent, default_proto="https", data=None, conn_id=Non
                 etype = (data or {}).get("type", "outgoing")
             result["type"] = etype
             if etype == "outgoing":
-                required_fields += ["smtp_server", "smtp_port", "smtp_username", "smtp_password"]
+                required_fields += ["smtp_server", "smtp_port", "smtp_username", "smtp_password", "smtp_to"]
             else:
                 required_fields += ["incoming_server", "incoming_port", "incoming_username", "incoming_password"]
         elif p in ("https", "wss"):
@@ -306,6 +310,13 @@ def edit_connection_dialog(parent, default_proto="https", data=None, conn_id=Non
                 if not str(txt).strip():
                     QMessageBox.warning(dlg, "Missing Field", f"'{key.replace('_', ' ').title()}' is required.")
                     return None, None
+
+        # Additional email format check for smtp_to
+        if "smtp_to" in fields:
+            smtp_to_val = fields["smtp_to"].text().strip()
+            if smtp_to_val and "@" not in smtp_to_val:
+                QMessageBox.warning(dlg, "Invalid Email", "'To (default recipient)' must be a valid email address.")
+                return None, None
 
         for k, widget in fields.items():
 

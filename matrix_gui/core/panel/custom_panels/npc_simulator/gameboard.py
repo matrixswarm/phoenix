@@ -70,11 +70,6 @@ class Gameboard(PhoenixPanelInterface):
                         lambda: self.session_window.show_specialty_panel(self))
         ]
 
-    def on_deployment_updated(self, deployment):
-        """React to deployment changes if relevant."""
-        self.deployment = deployment
-        print("[GAMEBOARD] 🔄 Deployment updated")
-
     def _on_show(self):
         """Optional: redraw grid when panel becomes visible."""
         if getattr(self, "has_drawn", False):

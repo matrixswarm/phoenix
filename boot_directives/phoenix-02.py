@@ -142,7 +142,8 @@ matrix_directive = {
                     {
                         "role": [
                             "hive.alert@cmd_send_alert_msg",
-                            "hive.rpc@cmd_rpc_route"
+                            "hive.rpc@cmd_rpc_route",
+                            "hive.swarm_feed.alert@cmd_send_alert_msg"
                         ],
                         "scope": [
                             "parent",
@@ -195,6 +196,31 @@ matrix_directive = {
                         "default": 10
                     },
                     "exclusive": False
+                }]
+            }
+        },
+        {
+            "universal_id": "gamer-in-nova-1",
+            "name": "trend_scout",
+            "tags": {
+                "packet_signing": {"in": True, "out": True},
+                "symmetric_encryption": {"type": "aes"}
+            },
+            "config": {
+
+                "ui": {
+                    "agent_tree": {"emoji": "📈"},
+                    "panel": [
+                        "trend_scout.trend_ingest"
+                    ],
+                },
+                "service-manager": [{
+                    "role": [
+                        "hive.trend_scout.push_local@cmd_push_local",
+                        "hive.trend_scout.update_config@cmd_update_config",
+                        "hive.trend_scout.status@cmd_status"
+                    ],
+                    "scope": ["parent", "any"]
                 }]
             }
         },
@@ -295,7 +321,7 @@ matrix_directive = {
         {
             "universal_id": "invisible-man",
             "name": "ghost_wire",
-            "enabled": False,
+            "enabled": True,
             "config": {
                 "ui": {
                     "agent_tree": {"emoji": "👻️"},
@@ -319,7 +345,9 @@ matrix_directive = {
                     "sudo",
                     "su",
                     "chmod 777"
-                ]
+                ],
+
+
             }
         },
         {
@@ -381,8 +409,43 @@ matrix_directive = {
                 },
                 "service-manager": [{
                     "role": ["hive.alert@cmd_send_alert_msg", "send_email.send@cmd_send_email"],
-                    "scope": ["parent", "any"],
-                }]
+                    "scope": ["parent", "any"], }]
+            }
+        },
+        {
+            "universal_id": "email-harvest",
+            "name": "email_check",
+            "tags": {
+                "connection": {
+                    "proto": "email",
+                    "direction": {"incoming": True}
+                },
+                "packet_signing": {"in": True, "out": True},
+                "symmetric_encryption": {"type": "aes"}
+            },
+            "config": {
+                "ui": {
+                    "agent_tree": {"emoji": "📨"},
+                    "panel": [
+                        "email_check.email_check"
+                    ]
+                },
+                "service-manager": [
+                    {
+                        "role": [
+                            "hive.email_check.check_email@cmd_check_email",
+                            "hive.email_check.retrieve_email@cmd_retrieve_email",
+                            "hive.email_check.delete_email@cmd_delete_email",
+                            "hive.email_check.update_accounts@cmd_update_accounts",
+                            "hive.email_check.remove_account@cmd_remove_account",
+                            "hive.email_check.list_accounts@cmd_list_accounts",
+                            "hive.email_check.nuke_accounts@cmd_nuke_accounts",
+                            "hive.email_check.list_mailbox@cmd_list_mailbox",
+                            "hive.email_check.list_folders@cmd_list_folders",
+                        ],
+                        "scope": ["parent", "any"]
+                    }
+                ]
             }
         },
         {
@@ -506,15 +569,15 @@ matrix_directive = {
                     "role": ["logwatch.generate.digest@cmd_generate_system_log_digest"],
                 }],
                 "collectors": {
-                    "httpd": { "paths": ["/var/log/httpd/error_log", "/var/log/httpd/dragoart_error.log", "/var/log/httpd/matrixswarm_error.log"], "rotate_depth": 1, "max_lines": 500 },
-                    "mod_secure": { "paths": ["/var/log/httpd"], "rotate_depth": 1, "max_lines": 500 },
-                    "sshd": { "paths": ["/var/log/secure"], "rotate_depth": 1, "max_lines": 500 },
-                    "fail2ban": { "paths": ["/var/log/fail2ban.log"], "rotate_depth": 1, "max_lines": 500 },
-                    "systemd": { "paths": ["/var/log/messages"], "rotate_depth": 1, "max_lines": 500 },
-                    "postfix": { "paths": ["/var/log/maillog"], "rotate_depth": 1, "max_lines": 500 },
-                    "dovecot": { "paths": ["/var/log/maillog"], "rotate_depth": 1, "max_lines": 500 }
+                    "httpd": { "paths": ["/var/log/httpd/error_log", "/var/log/httpd/dragoart_error.log", "/var/log/httpd/matrixswarm_error.log"], "rotate_depth": 1, "max_lines": 100 },
+                    "mod_secure": { "paths": ["/var/log/httpd"], "rotate_depth": 1, "max_lines": 100 },
+                    "sshd": { "paths": ["/var/log/secure"], "rotate_depth": 1, "max_lines": 100 },
+                    "fail2ban": { "paths": ["/var/log/fail2ban.log"], "rotate_depth": 1, "max_lines": 100 },
+                    "systemd": { "paths": ["/var/log/messages"], "rotate_depth": 1, "max_lines": 100 },
+                    "postfix": { "paths": ["/var/log/maillog"], "rotate_depth": 1, "max_lines": 100 },
+                    "dovecot": { "paths": ["/var/log/dovecot.log"], "rotate_depth": 1, "max_lines": 100 }
                 },
-                "enable_oracle": 1,
+                "enable_oracle": 0,
                 "oracle_role": "hive.oracle",
                 "oracle_timeout": 120,
                 "patrol_interval_hours": 6,
@@ -594,6 +657,7 @@ matrix_directive = {
             "config": {
                 "ui": {
                     "agent_tree": {"emoji": "🔮"},
+                    "panel": ["oracle.oracle_config_panel"]
                 },
                 "service-manager": [{
                     "role": ["hive.oracle@cmd_msg_prompt", "external.gateway.config@cmd_external_gateway_config"],

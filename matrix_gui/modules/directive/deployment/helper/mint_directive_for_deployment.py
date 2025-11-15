@@ -78,11 +78,15 @@ def mint_directive_for_deployment(template_directive: dict, wrapped_agents: list
 
             # handle cert injection as before
             for tag_name, tag_info in CERT_INJECTION_MAP.items():
+
                 if tag_name == "config":
                     continue  # config handled separately
+
                 tag_data = tags.get(tag_name)
+
                 if not tag_data:
                     continue
+
                 if tag_name == "packet_signing":
                     target_path = tag_info["target"]
                     signing = wrapper.get_signing()
@@ -92,6 +96,7 @@ def mint_directive_for_deployment(template_directive: dict, wrapped_agents: list
                                 val = signing.get(field)
                                 if val:
                                     set_nested(node, target_path, field, val)
+
                 if tag_name == "symmetric_encryption":
                     target_path = tag_info["target"]  # e.g. ["config", "security", "symmetric_encryption"]
                     sym = wrapper.get_symmetric_encryption() or {}

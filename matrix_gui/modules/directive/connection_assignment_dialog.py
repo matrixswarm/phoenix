@@ -1,22 +1,6 @@
 from PyQt6.QtWidgets import QLabel, QComboBox, QPushButton, QVBoxLayout, QHBoxLayout, QDialog
-
 from matrix_gui.modules.directive.maps.base import CERT_INJECTION_MAP
-
-"""
-Module: Connection Assignment Dialog
-
-This module contains the `ConnectionAssignmentDialog` class, designed to facilitate the assignment of connections to a given resource or task. It includes functionality for validating row selection, managing connection state, and applying assignments based on user input.
-
----
-
-Classes:
-    - ConnectionAssignmentDialog: A dialog for selecting and assigning connections.
-
----
-
-class ConnectionAssignmentDialog:
-    """
-
+from PyQt6.QtCore import QTimer
 class ConnectionAssignmentDialog(QDialog):
     def __init__(self, parent, wrapped_agents, conn_mgr):
         super().__init__(parent)
@@ -35,6 +19,8 @@ class ConnectionAssignmentDialog(QDialog):
         for wrapper in wrapped_agents:
             uid = wrapper.get_universal_id()
             proto = wrapper.get_requested_proto()
+            subtype = wrapper.get_connection_subtype()
+
             if not proto:
                 continue  # skip non-connection consumers
 
@@ -44,8 +30,28 @@ class ConnectionAssignmentDialog(QDialog):
             cb = QComboBox()
             status_lbl = QLabel("❌ unresolved")
 
-            for conn_id, conn_data in conn_mgr.get(proto, {}).items():
-                cb.addItem(conn_id, (proto, conn_id))
+            try:
+                available = self._conn_mgr.get(proto, {}) or {}
+                matched_any = False
+
+                for conn_id, conn_data in available.items():
+                    if proto == "email":
+                        conn_type = str(conn_data.get("type", "")).lower().strip()
+                        if subtype and conn_type != subtype:
+                            continue
+
+                    label = conn_data.get("label", conn_id)
+                    if proto == "email":
+                        label += f" ({conn_data.get('type', '?')})"
+                    cb.addItem(label, (proto, conn_id))
+                    matched_any = True
+
+                if not matched_any:
+                    cb.addItem("(no matching connections)", userData=None)
+
+            except Exception as e:
+                print(f"[ERROR] Failed to populate connection options for {uid} ({proto}): {e}")
+                cb.addItem("(error loading connections)", userData=None)
 
             cb.currentIndexChanged.connect(
                 lambda _, w=wrapper, c=cb, l=status_lbl: self._check_row(w, c, l)
@@ -57,6 +63,17 @@ class ConnectionAssignmentDialog(QDialog):
             self._rows.append((wrapper, cb, status_lbl))
             self._check_row(wrapper, cb, status_lbl)
             had_any_rows = True
+
+        # ---------------------------------------------------------------
+        # if there were zero dropdown rows created, skip the dialog
+        # (means no agent required connection assignment at all)
+        # ---------------------------------------------------------------
+        if not self._rows:
+            print("[DEPLOY] No agents require connection resolution — skipping dialog.")
+            QTimer.singleShot(0, self.accept)
+            return
+        # ---------------------------------------------------------------
+
 
         # Always build buttons
         btn_row = QHBoxLayout()
@@ -86,35 +103,22 @@ class ConnectionAssignmentDialog(QDialog):
 
         # Map-driven check
         connection_map = CERT_INJECTION_MAP.get("connection", {})
-        if proto in connection_map:
-            proto_map = connection_map[proto]
+        subtype = wrapper.get_connection_subtype()
 
-            # --- EMAIL special case ---
-            if proto == "email":
-                outgoing_fields = proto_map.get("outgoing", {}).get("fields", [])
-                incoming_fields = proto_map.get("incoming", {}).get("fields", [])
-
-                has_outgoing = all(conn.get(f) for f in outgoing_fields)
-                has_incoming = all(conn.get(f) for f in incoming_fields)
-                ok = has_outgoing or has_incoming
-                why = (
-                    "ok (outgoing)"
-                    if has_outgoing
-                    else "ok (incoming)"
-                    if has_incoming
-                    else f"missing required: SMTP {outgoing_fields} / IMAP {incoming_fields}"
-                )
+        if proto == "email":
+            required_fields = []
+            if subtype in connection_map[proto]:
+                required_fields = connection_map[proto][subtype].get("fields", [])
             else:
-                # Normal protocols (flat list)
-                required_fields = proto_map.get("fields", [])
-                if isinstance(required_fields, dict):
-                    all_fields = []
-                    for v in required_fields.values():
-                        all_fields.extend(v)
-                    required_fields = all_fields
+                # fallback: if unknown subtype, try to check both sets
+                outgoing = connection_map[proto].get("outgoing", {}).get("fields", [])
+                incoming = connection_map[proto].get("incoming", {}).get("fields", [])
+                required_fields = list(set(outgoing + incoming))
+        else:
+            required_fields = connection_map[proto].get("fields", [])
 
-                ok = all(conn.get(f) for f in required_fields) if required_fields else False
-                why = "ok" if ok else f"missing required: {', '.join(required_fields)}"
+        ok = all(conn.get(f) for f in required_fields) if required_fields else False
+        why = "ok" if ok else f"missing required: {', '.join(required_fields)}"
 
         lbl.setText("✅ resolved" if ok else "❌ unresolved")
         lbl.setToolTip(f"{proto}: {why}")

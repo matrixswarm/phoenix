@@ -5,7 +5,6 @@ from .connector.wss.wss import WSSConnector
 from .entity.adapter.agent_connection_wrapper import AgentConnectionWrapper
 from matrix_gui.config.boot.globals import get_sessions
 from matrix_gui.core.dispatcher.session_bus import SessionBus
-
 from matrix_gui.core.connector_bus import ConnectorBus
 
 # later: from discord_connector import connect_discord, etc.
@@ -23,9 +22,6 @@ CONNECTOR_MAP = {
     # future: "slack": connect_slack,
     # future: "sms": connect_sms,
 }
-
-def start_session(deployment, dep_id=None):
-    return _connect_single(deployment, dep_id)
 
 def on_connect(dep_id=None, vault_data=None, **kwargs):
     """

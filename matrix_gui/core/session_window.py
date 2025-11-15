@@ -4,17 +4,20 @@ import time
 import datetime
 from pathlib import Path
 import inspect
-
 import copy
-from PyQt6.QtWidgets import QMainWindow
-from PyQt6.QtWidgets import QStackedWidget
+import importlib
+from multiprocessing import Process, Pipe
+
+import matrix_gui.core.panel.scraper.scraper_process as sproc
+importlib.reload(sproc)
+from matrix_gui.core.panel.scraper.scraper_process import scraper_entry
 from PyQt6.QtGui import QIcon
 from PyQt6.QtCore import Qt, QSize, QTimer
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QToolBar,
-    QGroupBox, QLabel, QApplication
+    QGroupBox, QApplication, QMainWindow, QStackedWidget, QLabel
 )
-from matrix_gui.modules.net import deployment_connector
+
 from matrix_gui.core.panel.control_bar import PanelButton
 from matrix_gui.core.panel.agent_detail.agent_detail_panel import AgentDetailPanel
 from matrix_gui.core.panel.crypto_alert.crypto_alert import CryptoAlertPanel
@@ -32,6 +35,14 @@ from matrix_gui.core.panel.replace_agent_panel import ReplaceAgentPanel
 from matrix_gui.core.panel.hotswap_agent_panel import HotswapAgentPanel
 from matrix_gui.core.panel.inject_agent_panel import InjectAgentPanel
 from matrix_gui.core.panel.control_bar import ControlBar
+from matrix_gui.modules.vault.services.vault_connection_singleton import VaultConnectionSingleton
+
+DEBUG_SCRAPER = True
+
+
+def sdbg(msg):
+    if DEBUG_SCRAPER:
+        print(f"[SCRAPER-DBG] {msg}")
 
 
 def run_session(session_id, conn):
@@ -105,8 +116,6 @@ def run_session(session_id, conn):
         outbound = OutboundDispatcher(ctx.bus, get_sessions(), deployment)
         ctx.inbound, ctx.outbound = inbound, outbound
 
-
-
         print(f"[DEBUG] Bus ID for session {session_id}: {id(ctx.bus)}")
 
         win = SessionWindow(
@@ -163,6 +172,13 @@ class SessionWindow(QMainWindow):
 
             self.conn = conn
             self.session_id = session_id
+            self.vault_singleton = VaultConnectionSingleton.get(dep_id=deployment_id, conn=conn)
+            self.vault_singleton.load(deployment)
+
+            #scraper process
+            self.scraper_proc = None
+            self.scraper_conn = None
+
             self.cockpit_id = cockpit_id
             self.deployment = deployment
             self.bus = bus
@@ -230,6 +246,8 @@ class SessionWindow(QMainWindow):
             self.bus.on(f"inbound.verified.agent_log_view.update", self._handle_log_update)
             self.bus.on("gui.agent.selected", self._handle_agent_selected)
             self.bus.on("gui.log.token.updated", self._set_active_log_token)
+            self.bus.on("scraper.run.requested", self._handle_scraper_request)
+
 
         except Exception as e:
             emit_gui_exception_log("session_window.__init__", e)
@@ -246,14 +264,40 @@ class SessionWindow(QMainWindow):
             while self.conn.poll():
                 msg = self.conn.recv()
                 mtype = msg.get("type")
-                if mtype == "deployment_updated":
-                    self.handle_deployment_update(msg["deployment_id"], msg["deployment"])
-                elif mtype == "force_close":
+                if mtype == "force_close":
                     print(f"[SESSION] 🧨 Received external close for {self.session_id}")
                     self._handle_external_close()
+
+            # 2) ALWAYS check scraper pipe (even if Phoenix pipe is empty)
+            if self.scraper_conn and self.scraper_conn.poll():
+                s_msg = self.scraper_conn.recv()
+                m_type = s_msg.get("type")
+
+                if m_type == "scrape_results":
+                    self.bus.emit(
+                        "scrape.completed",
+                        data=s_msg.get("data"),
+                        session_id=self.session_id
+                    )
+
+                elif m_type == "scrape_error":
+                    self.bus.emit(
+                        "scrape.failed",
+                        error=s_msg.get("error"),
+                        session_id=self.session_id
+                    )
+
+                elif m_type == "scrape_log":
+                    self.bus.emit(
+                        "scrape.log",
+                        line=s_msg.get("line"),
+                        session_id=self.session_id
+                    )
+
         except (EOFError, OSError):
             print(f"[SESSION][PIPE] Lost pipe for {self.session_id}")
             self._pipe_timer.stop()
+
 
     def _send_heartbeat(self):
         try:
@@ -340,9 +384,11 @@ class SessionWindow(QMainWindow):
             if cache_key in self._panel_cache:
                 return self._panel_cache[cache_key]
 
-            mod_path, class_name = panel_name.rsplit(".", 1)
-            class_name = "".join(part.capitalize() for part in class_name.split("_"))
-            full_mod = f"matrix_gui.core.panel.custom_panels.{mod_path}.{panel_name.split('.')[-1]}"
+            parts = panel_name.split(".")
+            mod_leaf = parts[-1]  # e.g. "email_check"
+            mod_path = ".".join(parts[:-1]) if len(parts) > 1 else parts[0]
+            class_name = "".join(part.capitalize() for part in mod_leaf.split("_"))  # EmailCheck
+            full_mod = f"matrix_gui.core.panel.custom_panels.{mod_path}.{mod_leaf}"
 
             try:
                 mod = __import__(full_mod, fromlist=[class_name])
@@ -379,8 +425,8 @@ class SessionWindow(QMainWindow):
         try:
             self.stacked.setCurrentWidget(self.default_panel)
             # Only clear the secondary rack — keep the default top row
-            if hasattr(self, "control_bar"):
-                self.control_bar.clear_secondary_buttons()
+            #if hasattr(self, "control_bar"):
+                #self.control_bar.clear_secondary_buttons()
         except Exception as e:
             emit_gui_exception_log("SessionWindow.show_default_panel", e)
 
@@ -634,6 +680,7 @@ class SessionWindow(QMainWindow):
     # --- Other unchanged methods ---
     def _send_cmd(self, cmd): pass
 
+
     def _setup_status_bar(self):
         try:
             status_bar = QToolBar("Session Status", self)
@@ -653,42 +700,73 @@ class SessionWindow(QMainWindow):
         except Exception as e:
             emit_gui_exception_log("session_window._setup_status_bar", e)
 
-    def save_deployment_to_vault(self):
-        try:
-            if self.conn:
-                self.conn.send({
-                    "type": "vault_update_request",
-                    "deployment_id": self.deployment_id,
-                    "deployment": self.deployment,
-                })
-                print(f"[DEBUG] Sending favorites for {self.deployment_id}: {self.deployment.get('terminal_favorites')}")
-        except Exception as e:
-            emit_gui_exception_log("SessionWindow.save_deployment_to_vault", e)
-
-    def handle_deployment_update(self, dep_id, deployment):
-        try:
-            self.deployment = deployment
-
-            for panel in self._panel_cache.values():
-                if hasattr(panel, "on_deployment_updated"):
-                    panel.on_deployment_updated(deployment)
-
-        except Exception as e:
-            emit_gui_exception_log("SessionWindow.handle_deployment_update", e)
-
     def _handle_swarm_alert(self, session_id, channel, source, payload, **_):
         try:
             if self.conn:
 
-                self.conn.send({"type": "swarm_feed" , "event": {"payload": payload, "session_id": self.session_id, "deployment": self.deployment.get("label", "unknown")}})
+                self.conn.send({"type": "swarm_feed" , "event": {"payload": payload, "session_id": self.session_id}})
 
         except Exception as e:
             emit_gui_exception_log("SessionWindow._handle_swarm_alert", e)
+
+    def _handle_scraper_request(self, session_id, sources, filters, keepalive, **_):
+
+        sdbg(f"REQUEST RECEIVED for session={session_id}")
+        sdbg(f"Sources: {sources}")
+        sdbg(f"Filters: {filters}")
+        sdbg(f"Keepalive: {keepalive}")
+
+        try:
+            sdbg("Checking for old scraper process…")
+            # Kill old scraper if running
+            if self.scraper_proc:
+                sdbg("Killing old scraper proc…")
+                try:
+                    self.scraper_conn.send({"type": "exit"})
+                except Exception as e:
+                    sdbg(f"Old scraper exit-send failed: {e}")
+                try:
+                    self.scraper_proc.terminate()
+                    sdbg("Old scraper terminated clean.")
+                except Exception as e:
+                    sdbg(f"Old scraper terminate() failed: {e}")
+
+            sdbg("Creating pipe pair…")
+            parent_conn, child_conn = Pipe()
+            self.scraper_conn = parent_conn
+
+            sdbg(f"Launching scraper subprocess now… (function={scraper_entry})")
+
+            self.scraper_proc = Process(
+                target=scraper_entry,
+                args=(child_conn,),
+                daemon=True
+            )
+
+            self.scraper_proc.start()
+            sdbg(f"Scraper process started. PID={self.scraper_proc.pid}")
+
+            sdbg("Sending RUN command to scraper child…")
+            parent_conn.send({
+                "type": "run",
+                "sources": sources,
+                "filters": filters,
+                "keepalive": keepalive
+            })
+            sdbg("RUN command sent.")
+
+        except Exception as e:
+            sdbg(f"🔥 EXCEPTION IN _handle_scraper_request: {e}")
+            import traceback;
+            traceback.print_exc()
+
+            self.bus.emit("scrape.failed", session_id=self.session_id, error=str(e))
 
     def _handle_external_close(self):
         """Called when cockpit sends {'type': 'force_close'} over the pipe."""
         print(f"[SESSION] Received external close for {self.session_id}")
         self.close()
+
 
     def closeEvent(self, event):
         print(f"[SESSION] {self.cockpit_id} closing, destroying session")
@@ -699,28 +777,39 @@ class SessionWindow(QMainWindow):
             self.bus.off(f"inbound.verified.agent_log_view.update", self._handle_log_update)
             self.bus.off("gui.agent.selected", self._handle_agent_selected)
             self.bus.off("gui.log.token.updated", self._set_active_log_token)
+            self.bus.off("scraper.run.requested", self._handle_scraper_request)
+
 
             for panel in self._panel_cache.values():
                 try:
-                    panel._disconnect_signals()
+                    #panel._disconnect_signals()
+                    panel.closeEvent(event)
+
                 except Exception as e:
                     print(f"[SESSION][CLEANUP] Failed to delete panel: {e}")
+
             self._panel_cache.clear()
 
+            if self.scraper_proc and self.scraper_proc.is_alive():
+                try:
+                    self.scraper_conn.send({"type": "exit"})
+                except:
+                    pass
+                self.scraper_proc.terminate()
+
+        except Exception as e:
+            emit_gui_exception_log("SessionWindow.closeEvent.destroy_session", e)
+        finally:
             if self.conn:
                 try:
                     self.conn.send({
                         "type": "exit",
                         "session_id": self.cockpit_id
                     })
+
+                    self.scraper_conn.send({"type": "exit"})
+
                 except (BrokenPipeError, OSError):
                     print("[SESSION][EXIT] Pipe already closed – skipping exit signal.")
-                finally:
-                    self.conn.close()
-            deployment_connector.destroy_session(self.session_id)
-
-        except Exception as e:
-            emit_gui_exception_log("SessionWindow.closeEvent.destroy_session", e)
-        super().closeEvent(event)
 
 

@@ -1,5 +1,4 @@
 import os, ssl, json, time
-import uuid
 import threading
 import tempfile
 import socket
@@ -84,6 +83,7 @@ def establish_ws_connection(host, port, agent, deployment, session_id, timeout=5
         for p in [cert_path, key_path]:
             if p and os.path.exists(p):
                 os.remove(p)
+        print(f"[CERT_LOADER][WSS] 🧹 Cleaned up {cert_path}, {key_path}")
 
 class WSSConnector(BaseConnector):
     def __init__(self, running=True):

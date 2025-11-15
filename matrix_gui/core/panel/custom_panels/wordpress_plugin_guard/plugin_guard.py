@@ -127,14 +127,6 @@ class PluginGuard(PhoenixPanelInterface):
                         lambda: self.session_window.show_specialty_panel(self))
         ]
 
-    def on_deployment_updated(self, deployment):
-        """Reload deployment info when parent session updates."""
-        try:
-            self.deployment = deployment
-            self._append_output("[DEPLOYMENT] 🔄 Deployment updated.")
-        except Exception as e:
-            emit_gui_exception_log("PluginGuard.on_deployment_updated", e)
-
     def _on_show(self):
         """Optional hook for when the panel becomes visible."""
         # Immediately refresh button state and request status sync

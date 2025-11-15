@@ -1,12 +1,15 @@
 # Authored by Daniel F MacDonald and ChatGPT-5 aka The Generals
 import time
 from PyQt6.QtWidgets import (
-    QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QLineEdit, QTextEdit, QMessageBox, QComboBox
+    QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QLineEdit, QTextEdit, QMessageBox, QComboBox, QGroupBox
 )
+from PyQt6.QtCore import Qt
+from PyQt6.QtWidgets import QStyle
 from matrix_gui.core.panel.custom_panels.interfaces.base_panel_interface import PhoenixPanelInterface
 from matrix_gui.core.class_lib.packet_delivery.packet.standard.command.packet import Packet
 from matrix_gui.core.panel.control_bar import PanelButton
 from matrix_gui.core.emit_gui_exception_log import emit_gui_exception_log
+from matrix_gui.modules.vault.services.vault_connection_singleton import VaultConnectionSingleton
 
 class EmailSend(PhoenixPanelInterface):
     cache_panel = True
@@ -15,60 +18,123 @@ class EmailSend(PhoenixPanelInterface):
         super().__init__(session_id, bus, node=node, session_window=session_window)
         self.setLayout(self._build_layout())
         self.node=node
+        self._temp_load_email_connections()
 
     def _build_layout(self):
         layout = QVBoxLayout()
 
-        # === Connection dropdown ===
+        # === Connection Dropdown ===
         self.conn_selector = QComboBox()
         layout.addWidget(QLabel("Select Email Connection"))
         layout.addWidget(self.conn_selector)
 
-        # === Email form ===
-        self.smtp_host = QLineEdit()
+        # === Connection Section ===
+        conn_box = QGroupBox("📡 SMTP Connection")
+        conn_layout = QVBoxLayout()
+
+        row1 = QHBoxLayout()
+        row1.addWidget(QLabel("SMTP Host"))
+        self.smtp_server = QLineEdit()
+        row1.addWidget(self.smtp_server)
+        conn_layout.addLayout(row1)
+
+        row2 = QHBoxLayout()
+        row2.addWidget(QLabel("SMTP Port"))
         self.smtp_port = QLineEdit()
+        row2.addWidget(self.smtp_port)
+        conn_layout.addLayout(row2)
+
+        row3 = QHBoxLayout()
+        row3.addWidget(QLabel("From (email)"))
         self.smtp_user = QLineEdit()
+        row3.addWidget(self.smtp_user)
+        conn_layout.addLayout(row3)
+
+        pw_row = QHBoxLayout()
+        pw_row.addWidget(QLabel("Password"))
         self.smtp_pass = QLineEdit()
         self.smtp_pass.setEchoMode(QLineEdit.EchoMode.Password)
         self.view_pass_btn = QPushButton("👁 View")
         self.view_pass_btn.setCheckable(True)
         self.view_pass_btn.setFixedWidth(70)
         self.view_pass_btn.toggled.connect(self._toggle_password_visibility)
+        pw_row.addWidget(self.smtp_pass)
+        pw_row.addWidget(self.view_pass_btn)
+        conn_layout.addLayout(pw_row)
 
-        self.to_address = QLineEdit()
+        conn_box.setLayout(conn_layout)
+        layout.addWidget(conn_box)
+
+        # === Message Section ===
+        msg_box = QGroupBox("✉️ Message Details")
+        msg_layout = QVBoxLayout()
+
+        # === To (Email) Row with Save/Delete ===
+        row4 = QHBoxLayout()
+        row4.addWidget(QLabel("To (email)"))
+
+        self.to_address = QComboBox()
+        self.to_address.setEditable(True)
+        self.to_address.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
+        self.to_address.setSizePolicy(self.smtp_user.sizePolicy())
+        row4.addWidget(self.to_address, stretch=1)
+
+
+        # Save button
+        self.save_to_btn = QPushButton()
+        self.save_to_btn.setToolTip("Save this email to vault")
+        self.save_to_btn.setFixedSize(30, 30)
+        self.save_to_btn.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_DialogSaveButton))
+
+        # Delete button
+        self.del_to_btn = QPushButton()
+        self.del_to_btn.setToolTip("Delete selected email from vault")
+        self.del_to_btn.setFixedSize(30, 30)
+        self.del_to_btn.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_TrashIcon))
+
+        # vertical centering trick
+        btn_col = QVBoxLayout()
+        btn_col.setContentsMargins(0, 0, 0, 0)
+        btn_col.setSpacing(2)
+        btn_col.addWidget(self.save_to_btn, alignment=Qt.AlignmentFlag.AlignVCenter)
+        btn_col.addWidget(self.del_to_btn, alignment=Qt.AlignmentFlag.AlignVCenter)
+
+        row4.addLayout(btn_col)
+        msg_layout.addLayout(row4)
+
+        row5 = QHBoxLayout()
+        row5.addWidget(QLabel("Subject"))
         self.subject = QLineEdit()
+        row5.addWidget(self.subject)
+        msg_layout.addLayout(row5)
+
+        msg_layout.addWidget(QLabel("Body:"))
         self.body = QTextEdit()
+        msg_layout.addWidget(self.body)
 
-        form_fields = [
-            ("SMTP Host", self.smtp_host),
-            ("SMTP Port", self.smtp_port),
-            ("From (email)", self.smtp_user),
-            (None, self._make_pass_row()),  # password + view button
-            ("To (email)", self.to_address),
-            ("Subject", self.subject),
-        ]
+        msg_box.setLayout(msg_layout)
+        layout.addWidget(msg_box)
 
-        for label, widget in form_fields:
-            if label:
-                row = QHBoxLayout()
-                row.addWidget(QLabel(label))
-                row.addWidget(widget)
-                layout.addLayout(row)
-            else:
-                layout.addLayout(widget)
-
-        layout.addWidget(QLabel("Body:"))
-        layout.addWidget(self.body)
-
+        # === Actions ===
         self.send_btn = QPushButton("📧 Send Email")
-        self.send_btn.clicked.connect(self._send_email)
-        layout.addWidget(self.send_btn)
+        btn_row = QHBoxLayout()
+        btn_row.addStretch()
+        btn_row.addWidget(self.send_btn)
+        layout.addLayout(btn_row)
 
-        # when selecting a different saved connection, auto-fill fields
+        # === Bind Actions ===
+        self.send_btn.clicked.connect(self._send_email)
         self.conn_selector.currentIndexChanged.connect(self._on_connection_selected)
 
-        # preload connections from vault (if accessible)
-        self._load_email_connections()
+        # --- Load saved recipients on startup ---
+        self._load_saved_recipients()
+
+        # --- Bind save/delete ---
+        self.save_to_btn.clicked.connect(self._save_current_recipient)
+        self.del_to_btn.clicked.connect(self._delete_current_recipient)
+
+        # === Preload Connections ===
+        self._temp_load_email_connections()
 
         return layout
 
@@ -130,39 +196,119 @@ class EmailSend(PhoenixPanelInterface):
             print(f"[EMAIL PANEL][ERROR] Failed to load email connections: {e}")
 
     def _temp_load_email_connections(self):
-        """Populate dropdown from the vault snapshot embedded in the session deployment."""
+        """
+        Populate dropdown with:
+          1. All outgoing email connections from vault.connection_manager.email
+          2. The current agent's own email config (from self.node)
+        """
         try:
-            # Each session holds a copy of its deployment inside self.session_window.deployment
-            # The cockpit embeds vault data into that message at session launch.
-            # THIS IS GOING TO BE STRIPPED NEAR FUTURE, VIOLATES THE HOLLYWOOD PRINCIPLE; GOING TO IMPLY A SINGLETON
-            vault_data = getattr(self.session_window, "deployment", {}) or {}
-
-            # Look for the vault_data['vault_data'] fallback (depends on serialization at launch)
-
-            # Try to resolve connection_manager from vault or embedded section
-            conn_mgr = vault_data.get("connection_manager", {})
-
-            email_conns = conn_mgr.get("email", {})
-            self._connections = email_conns
-
             self.conn_selector.clear()
-            if not email_conns:
-                self.conn_selector.addItem("No email connections found", userData=None)
-                return
+            self._connections = {}
 
+            vault = VaultConnectionSingleton.get()
+
+            # Get all outgoing email connections from vault
+            vault_data = vault.fetch_fresh(target="connection_manager") or {}
+            conn_mgr = vault_data.get("connection_manager", {}) or vault_data.get("email", {}) or {}
+
+            # Normalize for different vault formats
+            email_conns = conn_mgr.get("email", conn_mgr) if isinstance(conn_mgr, dict) else {}
             for conn_id, data in email_conns.items():
-                label = data.get("label", conn_id)
-                addr = data.get("smtp_username", "") or data.get("smtp_server", "")
-                self.conn_selector.addItem(f"{label}  ({addr})", userData=(conn_id, data))
+                if isinstance(data, dict) and data.get("type") == "outgoing":
+                    label = data.get("label", conn_id)
+                    addr = data.get("smtp_username", "") or data.get("smtp_server", "")
+                    self.conn_selector.addItem(f"{label} ({addr})", userData=(conn_id, data))
+                    self._connections[conn_id] = data
+                    print(f"[EMAIL PANEL] Added vault connection: {label}")
 
-            # auto-select first
-            self.conn_selector.setCurrentIndex(0)
-            self._on_connection_selected(0)
+            # Add the current agent's own email config (if it exists)
+            if isinstance(self.node, dict):
+                tags = self.node.get("tags", {})
+                conn_tag = tags.get("connection", {}) or {}
+                proto = conn_tag.get("proto")
 
-            print(f"[EMAIL PANEL] Loaded {len(email_conns)} email connections from vault.")
+                if proto == "email":
+                    data = self.node.get("config", {}).get("email", {}) or {}
+                    if data:
+                        label = conn_tag.get("vault_ref", self.node.get("name", "agent_email"))
+                        addr = data.get("smtp_username", "") or data.get("smtp_server", "")
+                        conn_id = f"agent_{self.node.get('universal_id', 'unknown')}"
+                        if conn_id not in self._connections:
+                            self.conn_selector.addItem(f"{label} ({addr})", userData=(conn_id, data))
+                            self._connections[conn_id] = data
+                            print(f"[EMAIL PANEL] Added agent-specific connection: {label}")
+
+            # Default selection
+            if self.conn_selector.count() > 0:
+                self.conn_selector.setCurrentIndex(self.conn_selector.count() - 1)
+                self._on_connection_selected(self.conn_selector.currentIndex())
+                print(f"[EMAIL PANEL] Default connection: {self.conn_selector.currentText()}")
+            else:
+                self.conn_selector.addItem("No outgoing email connections found", userData=None)
+                print("[EMAIL PANEL] No connections found.")
 
         except Exception as e:
             print(f"[EMAIL PANEL][ERROR] Failed to load email connections: {e}")
+
+    def _load_saved_recipients(self):
+        """Load saved recipient emails from the current deployment, or vault fallback."""
+        try:
+            vault = VaultConnectionSingleton.get()
+
+            # ry from the current deployment first
+            dep = vault.read_deployment() or {}
+            recipients = (
+                dep.get("email_recipients", {}).get("recipients", [])
+                if isinstance(dep, dict) else []
+            )
+
+            # Fallback to vault query if none found
+            if not recipients:
+                vault_data = vault.fetch_fresh(target="email_recipients") or {}
+                recipients = vault_data.get("recipients", [])
+
+            # Populate dropdown
+            self.to_address.clear()
+            for addr in recipients:
+                if addr:
+                    self.to_address.addItem(addr)
+
+            print(f"[EMAIL PANEL] Loaded {len(recipients)} saved recipients from deployment/vault.")
+
+        except Exception as e:
+            print(f"[EMAIL PANEL][WARN] Failed to load saved recipients: {e}")
+
+    def _save_current_recipient(self):
+        """Save the current 'To' address into vault list."""
+        email = self.to_address.currentText().strip()
+        if not email:
+            return
+        try:
+            vault = VaultConnectionSingleton.get()
+            existing = vault.read_deployment().get("email_recipients", {}).get("recipients", [])
+            if email not in existing:
+                existing.append(email)
+                vault.update_field("email_recipients", {"recipients": existing})
+                print(f"[EMAIL PANEL] Saved new recipient: {email}")
+            self._load_saved_recipients()
+        except Exception as e:
+            print(f"[EMAIL PANEL][ERROR] Failed to save recipient: {e}")
+
+    def _delete_current_recipient(self):
+        """Delete selected 'To' address from vault list."""
+        email = self.to_address.currentText().strip()
+        if not email:
+            return
+        try:
+            vault = VaultConnectionSingleton.get()
+            existing = vault.read_deployment().get("email_recipients", {}).get("recipients", [])
+            if email in existing:
+                existing.remove(email)
+                vault.update_field("email_recipients", {"recipients": existing})
+                print(f"[EMAIL PANEL] Deleted recipient: {email}")
+            self._load_saved_recipients()
+        except Exception as e:
+            print(f"[EMAIL PANEL][ERROR] Failed to delete recipient: {e}")
 
     def _on_connection_selected(self, index):
         """Auto-fill SMTP fields when user selects a connection."""
@@ -183,7 +329,7 @@ class EmailSend(PhoenixPanelInterface):
                 return
 
             # fill in all known SMTP/IMAP fields
-            self.smtp_host.setText(str(cfg.get("smtp_server", "")))
+            self.smtp_server.setText(str(cfg.get("smtp_server", "")))
             self.smtp_port.setText(str(cfg.get("smtp_port", "")))
             self.smtp_user.setText(str(cfg.get("smtp_username", "")))
             self.smtp_pass.setText(str(cfg.get("smtp_password", "")))
@@ -212,11 +358,11 @@ class EmailSend(PhoenixPanelInterface):
                 "content": {
                     "service": "send_email.send",
                     "payload": {
-                        "smtp_host": self.smtp_host.text().strip(),
+                        "smtp_server": self.smtp_server.text().strip(),
                         "smtp_port": self.smtp_port.text().strip(),
                         "from": self.smtp_user.text().strip(),
                         "password": self.smtp_pass.text().strip(),
-                        "to": self.to_address.text().strip(),
+                        "to": self.to_address.currentText().strip(),
                         "subject": self.subject.text().strip(),
                         "body": self.body.toPlainText().strip(),
                     }
@@ -240,6 +386,3 @@ class EmailSend(PhoenixPanelInterface):
 
     def get_panel_buttons(self):
         return [PanelButton("📧", "EmailSend", lambda: self.session_window.show_specialty_panel(self))]
-
-    def on_deployment_updated(self, deployment):
-        self.deployment = deployment

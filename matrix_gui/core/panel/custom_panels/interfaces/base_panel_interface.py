@@ -19,6 +19,7 @@ class PhoenixPanelInterface(QWidget, metaclass=PanelABCMeta):
         self.session_id = session_id
         self.bus = bus
         self.node = node
+
         self.session_window = session_window
         self.conn = getattr(session_window, "conn", None)
         self.deployment = getattr(session_window, "deployment", {})
@@ -31,7 +32,7 @@ class PhoenixPanelInterface(QWidget, metaclass=PanelABCMeta):
         missing = [
             fn for fn in [
                 "_connect_signals", "_disconnect_signals",
-                "get_panel_buttons", "on_deployment_updated"
+                "get_panel_buttons"
             ]
             if not callable(getattr(self, fn, None))
         ]
@@ -106,5 +107,3 @@ class PhoenixPanelInterface(QWidget, metaclass=PanelABCMeta):
     def _disconnect_signals(self): ...
     @abstractmethod
     def get_panel_buttons(self): ...
-    @abstractmethod
-    def on_deployment_updated(self, deployment): ...

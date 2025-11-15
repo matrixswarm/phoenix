@@ -27,8 +27,8 @@ CERT_INJECTION_MAP = {
     "connection": {
         "email": {
             "target": ["config", "email"],
-            "incoming": {"fields": ["incoming_server", "incoming_port", "incoming_username", "incoming_password", "incoming_encryption"]},
-            "outgoing": {"fields":  ["smtp_server", "smtp_port", "smtp_username", "smtp_password", "smtp_encryption"]}
+            "incoming": {"fields": ["incoming_server", "incoming_port", "incoming_username", "incoming_password", "incoming_encryption", "serial"]},
+            "outgoing": {"fields":  ["smtp_server", "smtp_port", "smtp_username", "smtp_password", "smtp_encryption", "smtp_to", "serial"]}
         },
         'wss':{
             "target": ["config"],

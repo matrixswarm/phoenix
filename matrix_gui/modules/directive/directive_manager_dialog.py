@@ -17,15 +17,12 @@ from matrix_gui.modules.directive.ui.deployment_dialog import DeploymentDialog
 from matrix_gui.modules.directive.deploy_options_dialog import DeployOptionsDialog
 from matrix_gui.core.event_bus import EventBus
 from matrix_gui.modules.directive.connection_assignment_dialog import ConnectionAssignmentDialog
-from matrix_gui.modules.directive.cert_set_dialog import CertSetDialog
-from matrix_gui.modules.net.connection_manager_dialog import ConnectionManagerDialog
 from matrix_gui.modules.directive.deployment.helper.mint_directive_for_deployment import mint_directive_for_deployment
 from matrix_gui.modules.directive.deployment.helper.mint_deployment_metadata import mint_deployment_metadata
 from matrix_gui.core.dialog.agent_root_check_dialog import AgentRootCheckDialog
 from matrix_gui.core.class_lib.paths.agent_root_selector import AgentRootSelector
 from matrix_gui.core.emit_gui_exception_log import emit_gui_exception_log
-from PyQt6.QtWidgets import QInputDialog
-from PyQt6.QtWidgets import QListWidget, QPushButton, QTextEdit, QLabel
+from PyQt6.QtWidgets import QInputDialog, QListWidget, QPushButton, QTextEdit, QLabel
 from matrix_gui.modules.vault.crypto.deploy_tools import write_encrypted_bundle_to_file
 from matrix_gui.modules.directive.deployment.wrapper import agent_aggregator_wrapper, agent_connection_wrapper, agent_cert_wrapper, agent_directive_wrapper , agent_signing_cert_wrapper, agent_symmetric_encryption_wrapper
 from matrix_gui.modules.vault.ui.dump_vault_popup import DumpVaultPopup
@@ -62,7 +59,6 @@ class DirectiveManagerDialog(QDialog):
                 label = val.get("label", key)
 
             main_layout = QVBoxLayout(self)
-
 
             lists_row = QHBoxLayout()
 
@@ -387,7 +383,6 @@ class DirectiveManagerDialog(QDialog):
             password=self.password,
             data=self.vault_data
         )
-        QMessageBox.information(self, "Saved", f"Directive saved to vault as: {uid}")
         self.refresh_list()
 
     def deploy_directive(self):

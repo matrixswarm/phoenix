@@ -62,9 +62,9 @@ class HTTPSConnector(BaseConnector):
             inner["session_id"] = self.session_id
 
             # Sign with vault private key
-            dep = self.deployment or {}
+            dep = self.deployment
             uid = self.agent.get("universal_id")
-            signing = dep.get("certs", {}).get(uid, {}).get("signing", {})
+            signing = dep.get("certs").get(uid).get("signing")
             priv_pem = signing.get("remote_privkey")
 
             # mandatory
@@ -78,7 +78,6 @@ class HTTPSConnector(BaseConnector):
 
             outer = {"sig": sig_b64, "content": inner}
             body = json.dumps(outer, separators=(",", ":")).encode()
-
 
             # Build SSL context
             cert_adapter = AgentCertWrapper(self.agent, self.deployment)
@@ -96,9 +95,8 @@ class HTTPSConnector(BaseConnector):
             ctx_ssl = ssl.create_default_context(ssl.Purpose.SERVER_AUTH)
             ctx_ssl.check_hostname = False
             ctx_ssl.verify_mode = ssl.CERT_NONE
+            ctx_ssl.load_verify_locations(cadata=ca_pem)
             pin, cert_path, key_path = load_cert_chain_from_memory(ctx_ssl, cert_pem, key_pem)
-            if ca_pem:
-                ctx_ssl.load_verify_locations(cadata=ca_pem)
 
             # Connect
             raw_sock = socket.create_connection((self.host, self.port), timeout=timeout)
@@ -134,7 +132,7 @@ class HTTPSConnector(BaseConnector):
             try:
                 os.remove(cert_path)
                 os.remove(key_path)
-                print(f"[CERT_LOADER] 🧹 Cleaned up {cert_path}, {key_path}")
+                print(f"[CERT_LOADER][HTTPS] 🧹 Cleaned up {cert_path}, {key_path}")
             except Exception as e:
                 print(f"[CERT_LOADER][WARN] Failed cleanup: {e}")
             self._set_status("connected")

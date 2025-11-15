@@ -7,7 +7,7 @@ from PyQt6.QtWidgets import QTreeWidget, QTreeWidgetItem, QMenu
 
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QLabel, QGraphicsDropShadowEffect
-from PyQt6.QtGui import QColor
+
 from matrix_gui.core.emit_gui_exception_log import emit_gui_exception_log
 from matrix_gui.core.event_bus import EventBus
 class PhoenixStaticPanel(QWidget):
@@ -79,9 +79,7 @@ class PhoenixStaticPanel(QWidget):
         feed_box.setLayout(feed_layout)
         layout.addWidget(feed_box)
 
-
     def _refresh_deployment_summary(self):
-
         try:
             self.deployment_tree.clear()
             deployments = (self.vault_data or {}).get("deployments", {})

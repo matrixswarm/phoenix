@@ -7,12 +7,7 @@ Phoenix Cockpit is the GUI control plane for MatrixOS — a secure multi-agent r
 ---
  
 ## Next drop includes:
-
 - Added 2AUTH to Swarm; 2AUTH panel added to retrieve and verify token 
-- Full encrypted IMAP mailbox syncing (swarm-native)
-- Persistent, encrypted email storage under /matrix/universes/static/phoenix/latest/comm/<email_check>/mailbox/<mailbox_account>/cur/
-- SMTP email send from Phoenix to *any server* (on the fly)
-- other bug fixes
 ---
 
 ## 💙 Support Development

@@ -201,5 +201,5 @@ class ControlBar(QWidget):
             self.secondary_row.removeWidget(self._prefix_btn)
             self._prefix_btn.deleteLater()
         self._prefix_btn = self._make_button(icon, text, handler)
-        self._prefix_btn._is_prefix = True  # <-- Tag as persistent
+        self._prefix_btn._is_prefix = True
         self.secondary_row.insertWidget(0, self._prefix_btn)

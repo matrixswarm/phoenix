@@ -1,11 +1,12 @@
 # Authored by Daniel F MacDonald and ChatGPT 5 aka The Generals
-import uuid, time, hashlib, json, datetime
-from PyQt6.QtWidgets import QWidget, QVBoxLayout, QSizePolicy, QHeaderView, QTreeWidget, QTreeWidgetItem, QLabel
+import uuid, time, hashlib, json, datetime, platform
 from matrix_gui.core.emit_gui_exception_log import emit_gui_exception_log
 from matrix_gui.core.class_lib.packet_delivery.packet.standard.command.packet import Packet
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtWidgets import QMenu
 from collections import deque
+from PyQt6.QtGui import QFont
+from PyQt6.QtWidgets import QWidget, QVBoxLayout, QSizePolicy, QHeaderView, QTreeWidget, QTreeWidgetItem, QLabel
 
 class PhoenixAgentTree(QWidget):
     def __init__(self, session_id, vault_data=None, bus=None, conn=None, deployment=None, parent=None):
@@ -45,6 +46,7 @@ class PhoenixAgentTree(QWidget):
             #queue the return tree results
             self._update_queue = deque(maxlen=5)
             self._render_pending = False
+
 
 
             #context menu, right click, popup
@@ -249,6 +251,15 @@ class PhoenixAgentTree(QWidget):
                 # Create the tree item
                 item = QTreeWidgetItem([title])
                 item.setData(0, Qt.ItemDataRole.UserRole, node)
+
+                # --- Emoji font fallback (forces full emoji support) ---
+                font = QFont()
+                if platform.system() == "Windows":
+                    font.setFamily("Segoe UI Emoji")
+                else:
+                    font.setFamily("Noto Color Emoji")
+                item.setFont(0, font)
+                # --- End emoji font fallback ---
 
                 # Tooltip if marked
                 if flip_count > self.flip_tripping_threshold:

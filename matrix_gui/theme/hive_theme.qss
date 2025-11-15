@@ -308,3 +308,31 @@ QStatusBar QFrame, QStatusBar QGroupBox {
     border: none;
 
 }
+/* === EmailSend === */
+QGroupBox {
+    border: 1px solid #333;
+    border-radius: 6px;
+    margin-top: 12px;
+    padding: 8px;
+    background-color: #141414;
+}
+
+QGroupBox::title {
+    subcontrol-origin: margin;
+    left: 10px;
+    color: #bbb;
+    font-weight: bold;
+}
+
+QLabel {
+    color: #ccc;
+}
+QPushButton {
+    border: 1px solid #333;
+    border-radius: 4px;
+    background-color: #1a1a1a;
+}
+QPushButton:hover {
+    background-color: #242424;
+    border: 1px solid #555;
+}
