@@ -14,22 +14,6 @@ import sys
 from playwright.async_api import async_playwright
 from playwright_stealth import stealth_async
 
-
-# ============================================================
-# 🔥 GLOBAL CRASH HOOK
-# ============================================================
-def GLOBAL_SCRAPER_CRASH_HOOK(exc_type, exc, tb):
-    print("##############################")
-    print("🔥 SCRAPER GLOBAL CRASH 🔥")
-    print("TYPE:", exc_type)
-    print("ERROR:", exc)
-    print("TRACEBACK:")
-    traceback.print_tb(tb)
-    print("##############################")
-
-sys.excepthook = GLOBAL_SCRAPER_CRASH_HOOK
-
-
 # ============================================================
 # 🔧 HARDEN WINDOWS EVENT LOOP
 # ============================================================

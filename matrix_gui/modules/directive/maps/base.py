@@ -54,6 +54,20 @@ CERT_INJECTION_MAP = {
             "target": ["config"],
             "fields": ["webhook_url"],
         },
+        "ssh": {
+            "target": ["config", "ssh"],
+            "fields": [
+                "host",
+                "port",
+                "username",
+                "auth_type",
+                "trusted_host_fingerprint",
+                "serial",
+                "password",
+                "private_key"
+            ]
+
+        },
     },
 
 }

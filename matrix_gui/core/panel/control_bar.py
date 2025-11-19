@@ -177,7 +177,7 @@ class ControlBar(QWidget):
                 self._make_button("", "🔄 Restart", self.session_window._launch_restart_agent),
                 self._make_button("", "🔥 Hotswap", self.session_window._launch_hotswap_agent_modal),
                 self._make_button("", "🧬 Inject", self.session_window._launch_inject_agent_modal),
-
+                self._make_button("", "🌀 Matrix Reloaded", self.session_window._launch_matrix_reboot),
 
                 self._make_toggle_button("", "🧵 Threads",
                     lambda: self.session_window.detail_panel.inspector_group.isVisible(),

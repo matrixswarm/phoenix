@@ -414,7 +414,7 @@ class TrendIngest(PhoenixPanelInterface):
             self.bus.on("scrape_log", self._scrape_log)
 
         except Exception as e:
-            emit_gui_exception_log("LogWatcher._connect_signals", e)
+            emit_gui_exception_log("TrendIngest._connect_signals", e)
 
     def _disconnect_signals(self):
         """Detach bus listeners and clear any buffered lines."""
@@ -432,4 +432,4 @@ class TrendIngest(PhoenixPanelInterface):
                 self.bus.off("scrape_log", self._scrape_log)
 
             except Exception as e:
-                emit_gui_exception_log("trend_scout._disconnect_signals", e)
+                emit_gui_exception_log("TrendIngest._disconnect_signals", e)

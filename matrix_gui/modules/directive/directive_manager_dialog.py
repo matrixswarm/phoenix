@@ -1,13 +1,19 @@
+# Authored by Daniel F MacDonald and ChatGPT-5 aka The Generals
 import os
+import io
 import json
 import hashlib
 import uuid
 import base64
+import paramiko
+import ntpath
+import posixpath
+
 from copy import deepcopy
 from PyQt6 import QtWidgets, QtCore
 
 from PyQt6.QtWidgets import (
-    QDialog, QVBoxLayout, QHBoxLayout, QFileDialog, QMessageBox
+    QDialog, QVBoxLayout, QHBoxLayout, QFileDialog, QMessageBox, QCheckBox, QGroupBox
 )
 from pathlib import Path
 from runpy import run_path
@@ -22,10 +28,11 @@ from matrix_gui.modules.directive.deployment.helper.mint_deployment_metadata imp
 from matrix_gui.core.dialog.agent_root_check_dialog import AgentRootCheckDialog
 from matrix_gui.core.class_lib.paths.agent_root_selector import AgentRootSelector
 from matrix_gui.core.emit_gui_exception_log import emit_gui_exception_log
-from PyQt6.QtWidgets import QInputDialog, QListWidget, QPushButton, QTextEdit, QLabel
+from PyQt6.QtWidgets import QInputDialog, QListWidget, QPushButton, QTextEdit, QLabel, QComboBox
 from matrix_gui.modules.vault.crypto.deploy_tools import write_encrypted_bundle_to_file
 from matrix_gui.modules.directive.deployment.wrapper import agent_aggregator_wrapper, agent_connection_wrapper, agent_cert_wrapper, agent_directive_wrapper , agent_signing_cert_wrapper, agent_symmetric_encryption_wrapper
 from matrix_gui.modules.vault.ui.dump_vault_popup import DumpVaultPopup
+
 
 class DirectiveManagerDialog(QDialog):
     vault_updated = QtCore.pyqtSignal(dict)
@@ -115,11 +122,15 @@ class DirectiveManagerDialog(QDialog):
 
             self.saved_list_widget.itemClicked.connect(self.load_selected)
 
-
             #dump vault button and handler
             self.dump_vault_btn = QPushButton("Dump Vault")
             self.dump_vault_btn.clicked.connect(self.dump_vault)
             saved_btn_row.addWidget(self.dump_vault_btn)
+
+            #use graph to deply
+            #self.graph_btn = QPushButton("View / Edit Swarm Graph")
+            #self.graph_btn.clicked.connect(self._open_swarm_graph)
+            #saved_btn_row.addWidget(self.graph_btn)
 
             self.vault_key_path = self.vault_path.replace(".json", ".key.enc")
             # (Optional: deployed_list_widget connection if needed for view details, etc.)
@@ -306,6 +317,64 @@ class DirectiveManagerDialog(QDialog):
         except Exception as e:
             emit_gui_exception_log("DirectiveManagerDialog.delete_saved_directive", e)
 
+    def _open_swarm_graph(self):
+        try:
+            # Step 1. Confirm a directive is selected
+            item = self.saved_list_widget.currentItem()
+            if not item:
+                QMessageBox.warning(self, "No Selection", "Select a directive first.")
+                return
+
+            directive_id = item.text().split("::")[0].strip()
+            directive = self.directives.get(directive_id, {}).get("json", {})
+            if not directive:
+                QMessageBox.warning(self, "Missing Data", "Directive JSON not found.")
+                return
+
+            # Step 2. Locate or create the agents root path
+            agent_path = self.vault_data.get("last_agent_path")
+            verified_path = None
+
+            if agent_path and Path(agent_path).exists():
+                try:
+                    agents_root = AgentRootSelector.resolve_agents_root(agent_path)
+                    missing = AgentRootSelector.verify_all_sources(directive, str(agents_root))
+                    if not missing:
+                        verified_path = str(agents_root)
+                        print(f"[GRAPH] Cached agent path verified: {verified_path}")
+                    else:
+                        print(f"[GRAPH][WARN] Missing sources: {missing}")
+                except Exception as e:
+                    print(f"[GRAPH][ERROR] Failed to validate cached path: {e}")
+
+            if not verified_path:
+                # ask user to locate the root if missing
+                dlg = QFileDialog(self)
+                dlg.setFileMode(QFileDialog.FileMode.Directory)
+                dlg.setWindowTitle("Select Agents Root Directory")
+                if dlg.exec():
+                    selected_dir = dlg.selectedFiles()[0]
+                    try:
+                        verified_path = str(AgentRootSelector.resolve_agents_root(selected_dir))
+                        self.vault_data["last_agent_path"] = verified_path
+                        EventBus.emit(
+                            "vault.update",
+                            vault_path=self.vault_path,
+                            password=self.password,
+                            data=self.vault_data,
+                        )
+                    except Exception as e:
+                        QMessageBox.warning(self, "Invalid Path", str(e))
+                        return
+
+            # Step 3. Launch the graph workspace
+            from matrix_gui.modules.directive.graph.swarm_workspace import SwarmWorkspaceDialog
+            dlg = SwarmWorkspaceDialog(directive, verified_path, parent=self)
+            dlg.exec()
+
+        except Exception as e:
+            emit_gui_exception_log("DirectiveManagerDialog.open_swarm_graph", e)
+
     def load_selected(self):
         item = self.saved_list_widget.currentItem()
         if not item:
@@ -445,11 +514,15 @@ class DirectiveManagerDialog(QDialog):
 
             wrapped_agents = agent_directive_wrapper(agent_aggregator)
 
-            # step 5. Mint the final runtime directive (from template + deployment)
-            directive_staging = mint_directive_for_deployment(template_directive, wrapped_agents, deployment_id)
+            try:
+                # step 5. Mint the final runtime directive (from template + deployment)
+                directive_staging = mint_directive_for_deployment(template_directive, wrapped_agents, deployment_id)
+            except Exception as e:
+                emit_gui_exception_log("DirectiveManagerDialog.deploy_directive.mint_directive_for_deployment", e)
+
 
             # step 6. Options Dialog (Clown Car, Hashbang)
-            opts_dialog = DeployOptionsDialog(self)
+            opts_dialog = DeployOptionsDialog(self, label)
             if opts_dialog.exec() != QDialog.DialogCode.Accepted:
                 QMessageBox.information(self, "Cancelled", "Deployment process cancelled by operator.")
                 return
@@ -492,10 +565,10 @@ class DirectiveManagerDialog(QDialog):
                 if no valid cached path exists.
          
             """
-            clown_car = bool(opts["clown_car"])
+            clown_car = bool(opts.get("clown_car", False))
             hashbang = clown_car
 
-            if opts.get("clown_car", False):
+            if clown_car:
 
                 # Load last cached agent path from vault if available
                 agent_path = self.vault_data.get("last_agent_path")
@@ -540,7 +613,6 @@ class DirectiveManagerDialog(QDialog):
 
             bundle, aes_key, directive_hash = generate_swarm_encrypted_directive(directive_staging, clown_car, hashbang, base_path=agent_path)
 
-
             # step 8. Preview the newly minted directive (only once)
             staging_dialog = EncryptionStagingDialog(json.dumps(directive_staging, indent=2), self)
             if staging_dialog.exec() != QDialog.DialogCode.Accepted:
@@ -556,6 +628,12 @@ class DirectiveManagerDialog(QDialog):
             keys_dir.mkdir(parents=True, exist_ok=True)
 
             universe = f"{label.strip()}"
+
+            universe_temp=opts.get("universe", False)
+            railgun_enabled = bool(opts.get("railgun_enabled", False))
+            if universe_temp and railgun_enabled:
+                universe=universe_temp.strip()
+
             out_path = deploy_dir / f"{universe}.enc.json"
             key_path = keys_dir / f"{universe}.key"
 
@@ -597,6 +675,11 @@ class DirectiveManagerDialog(QDialog):
             )
             self.refresh_lists()
 
+            # === Optional Rail-Gun Fire ===
+            if bool(opts.get("railgun_enabled", False)):
+                ssh_cfg = opts.get("railgun_target", None)
+                if ssh_cfg:
+                    self._railgun_upload_and_boot(ssh_cfg, out_path, key_path, opts)
 
             # step 11. Show final deploy command to operator
             deploy_cmd = f"""
@@ -619,3 +702,119 @@ class DirectiveManagerDialog(QDialog):
         except Exception as e:
             print(f"Failed directive creation: {e}")
             QMessageBox.critical(self, "Error", f"Deployment error alert:\n{e}")
+
+        # -------------------------------------------------
+
+    def _railgun_upload_and_boot(self, ssh_meta, local_bundle, swarm_key_path, opts):
+        """Upload encrypted directive + Base64 swarm key to proper location, boot, then purge keys."""
+        try:
+            host = ssh_meta.get("host")
+            user = ssh_meta.get("username")
+            port = int(ssh_meta.get("port", 22))
+            privkey_pem = ssh_meta.get("private_key")
+
+            # --- SSH Setup ---
+            key = paramiko.RSAKey.from_private_key(io.StringIO(privkey_pem))
+            client = paramiko.SSHClient()
+            client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+            client.connect(host, port=port, username=user, pkey=key)
+            sftp = client.open_sftp()
+
+            remote_root = "/matrix/boot_directives"
+            remote_keys_dir = posixpath.join(remote_root, "keys")
+
+            # Ensure directories exist remotely
+            for d in (remote_root, remote_keys_dir):
+                try:
+                    sftp.stat(d)
+                except FileNotFoundError:
+                    sftp.mkdir(d)
+
+            # --- Ensure key is Base64 text ---
+            with open(swarm_key_path, "rb") as f:
+                data = f.read()
+
+            try:
+                base64.b64decode(data, validate=True)
+                print("[RAILGUN] Swarm key already Base64.")
+            except Exception:
+                b64_text = base64.b64encode(data).decode()
+                while len(b64_text) % 4 != 0:
+                    b64_text += "="
+                tmp_b64 = swarm_key_path + ".b64"
+                with open(tmp_b64, "w", newline="\n") as out:
+                    out.write(b64_text.rstrip(" \n\r") + "\n")
+                swarm_key_path = tmp_b64
+                print("[RAILGUN] Converted swarm key to Base64 text (padding normalized).")
+
+            def posix_join(a, b):
+                return posixpath.join(a, ntpath.basename(b))
+
+            remote_bundle = posix_join(remote_root, local_bundle)
+            remote_key = posix_join(remote_keys_dir, swarm_key_path)
+
+            sftp.put(local_bundle, remote_bundle)
+            print(f"[RAILGUN] Uploaded directive to {remote_bundle}")
+
+            sftp.put(swarm_key_path, remote_key)
+            print(f"[RAILGUN] Uploaded swarm key to {remote_key}")
+
+            sftp.close()
+
+            boot_flags = []
+
+            universe = opts.get("universe")
+
+            if opts.get("reboot"):       boot_flags.append("--reboot")
+            if opts.get("verbose"):      boot_flags.append("--verbose")
+            if opts.get("debug"):        boot_flags.append("--debug")
+            if opts.get("rug_pull"):     boot_flags.append("--rug-pull")
+            if opts.get("clean"):        boot_flags.append("--clean")
+            if opts.get("reboot_new"):   boot_flags.append("--reboot-new")
+
+            reboot_id = opts.get("reboot_id")
+            if reboot_id:
+                boot_flags.append(f"--reboot-id {reboot_id}")
+
+            boot_flags_str = " ".join(boot_flags)
+
+            # --- Fire matrixd boot ---
+            cmd = (
+                f"cd /matrix && "
+                f"export SITE_ROOT=/matrix && "
+                f"matrixd boot "
+                f"--universe {universe} "
+                f"--directive {remote_bundle} {boot_flags_str} "
+                f"&& echo '[RAILGUN] Boot complete, cleaning up...' "
+                f"&& sleep 2 "
+                f"&& rm -f {remote_key}"
+            )
+
+            print(f"[RAILGUN] Executing: {cmd}")
+
+            # Execute the command via SSH
+            stdin, stdout, stderr = client.exec_command(cmd)
+
+            # Dynamically read and print the output line-by-line
+            print("[RAILGUN] Output:")
+            for line in iter(stdout.readline, ""):
+                print(line.strip())  # Dynamically display each line of output
+
+            # Check for errors in the stderr stream
+            error_output = stderr.read().decode().strip()
+            if error_output:
+                print("[RAILGUN ERROR]", error_output)
+
+            # --- Cleanup local temporary Base64 ---
+            try:
+                if swarm_key_path.endswith(".b64"):
+                    os.remove(swarm_key_path)
+                    pass
+            except Exception:
+                pass
+
+            client.close()
+
+        except Exception as e:
+            QMessageBox.critical(self, "Railgun Failed", str(e))
+            print(f"[RAILGUN][ERROR] {e}")

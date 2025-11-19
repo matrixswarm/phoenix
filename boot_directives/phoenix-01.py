@@ -120,8 +120,36 @@ matrix_directive = {
             }
         },
         {
+            "universal_id": "i-clone-u",
+            "name": "rsync_boy",
+            "tags": {
+                "packet_signing": {"in": True, "out": True},
+                "connection": {
+                    "proto": "ssh"
+                },
+            },
+            "config": {
+
+                "ui": {
+                    "agent_tree": {"emoji": "💾"},
+                    "panel": [
+                        "rsync_boy.rsync_boy"
+                    ],
+                },
+                "service-manager": [{
+                    "role": [
+                        "hive.rsync_boy.push_local@cmd_push_local",
+                        "hive.rsync_boy.push_remote@cmd_push_remote",
+                    ],
+                    "scope": ["parent", "any"]
+                }]
+
+            }
+        },
+        {
             "universal_id": "gamer-in-nova-1",
             "name": "trend_scout",
+            "enabled": False,
             "tags": {
                 "packet_signing": {"in": True, "out": True},
                 "symmetric_encryption": {"type": "aes"}
@@ -648,6 +676,28 @@ matrix_directive = {
             }
         },
         {
+            "universal_id": "sora-agent-1",
+            "name": "sora",
+            "tags": {
+                "connection": { "proto": "openai" }
+            },
+            "config": {
+                "ui": {
+                    "agent_tree": { "emoji": "🎞️" },
+                    "panel": ["sora.sora_config_panel"]
+                },
+                "service-manager": [{
+                    "role": [
+                        "hive.sora@cmd_sora_prompt",
+                        "external.gateway.config@cmd_external_gateway_config"
+                    ]
+                }],
+                "model": "gpt-sora-1",
+                "resolution": "1920x1080",
+                "poll_interval": 4
+            }
+        }
+       ,{
             "universal_id": "golden-child-4",
             "name": "oracle",
             "tags": {

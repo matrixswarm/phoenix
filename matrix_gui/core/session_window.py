@@ -15,7 +15,7 @@ from PyQt6.QtGui import QIcon
 from PyQt6.QtCore import Qt, QSize, QTimer
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QToolBar,
-    QGroupBox, QApplication, QMainWindow, QStackedWidget, QLabel
+    QGroupBox, QApplication, QMainWindow, QStackedWidget, QLabel, QMessageBox
 )
 
 from matrix_gui.core.panel.control_bar import PanelButton
@@ -36,14 +36,6 @@ from matrix_gui.core.panel.hotswap_agent_panel import HotswapAgentPanel
 from matrix_gui.core.panel.inject_agent_panel import InjectAgentPanel
 from matrix_gui.core.panel.control_bar import ControlBar
 from matrix_gui.modules.vault.services.vault_connection_singleton import VaultConnectionSingleton
-
-DEBUG_SCRAPER = True
-
-
-def sdbg(msg):
-    if DEBUG_SCRAPER:
-        print(f"[SCRAPER-DBG] {msg}")
-
 
 def run_session(session_id, conn):
     """
@@ -246,7 +238,7 @@ class SessionWindow(QMainWindow):
             self.bus.on(f"inbound.verified.agent_log_view.update", self._handle_log_update)
             self.bus.on("gui.agent.selected", self._handle_agent_selected)
             self.bus.on("gui.log.token.updated", self._set_active_log_token)
-            self.bus.on("scraper.run.requested", self._handle_scraper_request)
+            #self.bus.on("scraper.run.requested", self._handle_scraper_request)
 
 
         except Exception as e:
@@ -327,7 +319,7 @@ class SessionWindow(QMainWindow):
     # --- Builders ---
     def _build_tree_panel(self):
         try:
-            box = QGroupBox("Agent Tree")
+            box = QGroupBox("🐦 Agent Tree")
 
             layout = QVBoxLayout()
             layout.setContentsMargins(6, 4, 6, 4)  # (L, T, R, B)
@@ -644,6 +636,47 @@ class SessionWindow(QMainWindow):
         except Exception as e:
             emit_gui_exception_log("SessionWindow._launch_inject_agent_modal", e)
 
+    def _launch_matrix_reboot(self):
+        try:
+            # === SAFETY PROMPT ===
+            confirm = QMessageBox.question(
+                self,
+                "⚠️ Reload Matrix Universe?",
+                (
+                    "This will *immediately* restart the entire Matrix universe.\n\n"
+                    "All agents will be terminated and relaunched.\n"
+                    "All active operations will be interrupted.\n\n"
+                    "⚡ This is **not** a soft reload.\n"
+                    "⚡ This is a full universe reboot.\n\n"
+                    "Are you absolutely sure you want to proceed?"
+                ),
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No
+            )
+
+            if confirm != QMessageBox.StandardButton.Yes:
+                print("[COCKPIT] Matrix Reload cancelled by user.")
+                return
+
+            # === PROCEED WITH REBOOT ===
+            from matrix_gui.core.class_lib.packet_delivery.packet.standard.command.packet import Packet
+            pk = Packet()
+            pk.set_data({
+                "handler": "cmd_matrix_reloaded"
+            })
+
+            self.bus.emit(
+                "outbound.message",
+                session_id=self.session_id,
+                channel="outgoing.command",
+                packet=pk
+            )
+
+            print("[COCKPIT] 🔁 Matrix Reload request sent.")
+
+        except Exception as e:
+            print(f"[COCKPIT][ERROR] Failed to launch Matrix reboot: {e}")
+
     def show_crypto_alert_panel(self):
         if "crypto_alert_panel" not in self._panel_cache:
             panel = CryptoAlertPanel(
@@ -711,31 +744,21 @@ class SessionWindow(QMainWindow):
 
     def _handle_scraper_request(self, session_id, sources, filters, keepalive, **_):
 
-        sdbg(f"REQUEST RECEIVED for session={session_id}")
-        sdbg(f"Sources: {sources}")
-        sdbg(f"Filters: {filters}")
-        sdbg(f"Keepalive: {keepalive}")
-
         try:
-            sdbg("Checking for old scraper process…")
             # Kill old scraper if running
             if self.scraper_proc:
-                sdbg("Killing old scraper proc…")
                 try:
                     self.scraper_conn.send({"type": "exit"})
                 except Exception as e:
-                    sdbg(f"Old scraper exit-send failed: {e}")
+                    pass
+
                 try:
                     self.scraper_proc.terminate()
-                    sdbg("Old scraper terminated clean.")
                 except Exception as e:
-                    sdbg(f"Old scraper terminate() failed: {e}")
+                    pass
 
-            sdbg("Creating pipe pair…")
             parent_conn, child_conn = Pipe()
             self.scraper_conn = parent_conn
-
-            sdbg(f"Launching scraper subprocess now… (function={scraper_entry})")
 
             self.scraper_proc = Process(
                 target=scraper_entry,
@@ -744,20 +767,17 @@ class SessionWindow(QMainWindow):
             )
 
             self.scraper_proc.start()
-            sdbg(f"Scraper process started. PID={self.scraper_proc.pid}")
 
-            sdbg("Sending RUN command to scraper child…")
             parent_conn.send({
                 "type": "run",
                 "sources": sources,
                 "filters": filters,
                 "keepalive": keepalive
             })
-            sdbg("RUN command sent.")
 
         except Exception as e:
-            sdbg(f"🔥 EXCEPTION IN _handle_scraper_request: {e}")
-            import traceback;
+            pass
+            import traceback
             traceback.print_exc()
 
             self.bus.emit("scrape.failed", session_id=self.session_id, error=str(e))
@@ -777,7 +797,7 @@ class SessionWindow(QMainWindow):
             self.bus.off(f"inbound.verified.agent_log_view.update", self._handle_log_update)
             self.bus.off("gui.agent.selected", self._handle_agent_selected)
             self.bus.off("gui.log.token.updated", self._set_active_log_token)
-            self.bus.off("scraper.run.requested", self._handle_scraper_request)
+            #self.bus.off("scraper.run.requested", self._handle_scraper_request)
 
 
             for panel in self._panel_cache.values():

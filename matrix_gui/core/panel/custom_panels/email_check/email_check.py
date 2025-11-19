@@ -27,6 +27,7 @@ class EmailCheck(PhoenixPanelInterface):
         self._load_servers()
         self.bus=bus
         self.page_limit=20
+        self._signals_connected=False
 
     # -------------------------------------------------------------------------
     # UI
@@ -223,54 +224,6 @@ class EmailCheck(PhoenixPanelInterface):
     def _temp_load_email_connections(self):
         self.conn_selector.addItem("No incoming email accounts", userData=None)
 
-    def _ttemp_load_email_connections(self):
-
-        """Populate dropdown using incoming email connections from vault root."""
-        try:
-            self.conn_selector.clear()
-            self._connections = {}
-
-            vault = VaultConnectionSingleton.get()
-            vault_data = vault.fetch_fresh(target="connection_manager")
-            email_section = vault_data.get("email", {})
-
-            if not email_section:
-                self.conn_selector.addItem("No email accounts found", userData=None)
-                print("[EMAIL_CHECK] ⚠ No 'email' section found. Keys:", list(vault_data.keys()))
-                return
-
-            count = 0
-            for conn_id, cfg in email_section.items():
-                if not isinstance(cfg, dict):
-                    continue
-                if cfg.get("proto") != "email" or cfg.get("type") != "incoming":
-                    continue
-
-                serial = cfg.get("serial", "?")
-                label = cfg.get("label", conn_id)
-                user = cfg.get("incoming_username", "")
-                host = cfg.get("incoming_server", "")
-                port = cfg.get("incoming_port", "")
-                display = f"{label} ({user}@{host}:{port})"
-
-                conn_info = {"conn_id": conn_id, "serial": serial, "cfg": cfg}
-                self.conn_selector.addItem(display, userData=conn_info)
-                self._connections[conn_id] = conn_info
-                count += 1
-                print(f"[EMAIL_CHECK] Added {label} serial={serial}")
-
-            if count == 0:
-                self.conn_selector.addItem("No incoming email accounts", userData=None)
-                print("[EMAIL_CHECK] ⚠ Found 'email' section but no incoming entries.")
-                return
-
-            self.conn_selector.currentIndexChanged.connect(self._on_connection_selected)
-            self.conn_selector.setCurrentIndex(0)
-            self._on_connection_selected(0)
-            print(f"[EMAIL_CHECK] ✅ Loaded {count} incoming email connection(s).")
-
-        except Exception as e:
-            print(f"[EMAIL_CHECK][ERROR] Failed to temp-load accounts: {e}")
 
     def _on_connection_selected(self, index):
         """Update info box when a connection is selected."""
@@ -286,6 +239,7 @@ class EmailCheck(PhoenixPanelInterface):
             self._current_serial = serial
             # immediately check mailbox
             payload = {"serial": serial}
+
             self._send_cmd("hive.email_check.check_email", payload)
 
             self.info_label.setText(
@@ -409,30 +363,6 @@ class EmailCheck(PhoenixPanelInterface):
     # -------------------------------------------------------------------------
     # Callback listener + pagination
     # -------------------------------------------------------------------------
-    def _connect_signals(self):
-        try:
-            scoped = f"inbound.verified.check_mail.cmd_list_mailbox"
-            self.bus.on(scoped, self._handle_mailbox_callback)
-            scoped =f"inbound.verified.check_mail.cmd_retrieve_email"
-            self.bus.on(scoped,self._handle_retrieve_callback)
-            scoped = f"inbound.verified.check_mail.load_email_accounts"
-            self.bus.on(scoped, self._handle_load_email_accounts)
-
-        except Exception as e:
-            print(f"[EMAIL_CHECK][ERROR] signal connect: {e}")
-
-    def _disconnect_signals(self):
-        try:
-            scoped = f"inbound.verified.check_mail.cmd_list_mailbox"
-            self.bus.off(scoped, self._handle_mailbox_callback)
-            scoped = f"inbound.verified.check_mail.cmd_retrieve_email"
-            self.bus.off(scoped, self._handle_retrieve_callback)
-            scoped = f"inbound.verified.check_mail.load_email_accounts"
-            self.bus.off(scoped, self._handle_load_email_accounts)
-
-        except Exception as e:
-            print(f"[EMAIL_CHECK][ERROR] signal disconnect: {e}")
-
     def _handle_load_email_accounts(self, payload):
         """Handle fresh account list pushed from EmailCheck agent."""
         try:
@@ -661,3 +591,45 @@ class EmailCheck(PhoenixPanelInterface):
     # -------------------------------------------------------------------------
     def get_panel_buttons(self):
         return [PanelButton("📨", "EmailCheck", lambda: self.session_window.show_specialty_panel(self))]
+
+    # ---------------------------------------------------------
+    # Bus Handlers (persistent)
+    # ---------------------------------------------------------
+    def _connect_signals(self):
+
+        """Attach bus listeners."""
+        try:
+            if self._signals_connected:
+                return
+            self._signals_connected = True
+
+            scoped = f"inbound.verified.check_mail.cmd_list_mailbox"
+            self.bus.on(scoped, self._handle_mailbox_callback)
+            scoped = f"inbound.verified.check_mail.cmd_retrieve_email"
+            self.bus.on(scoped, self._handle_retrieve_callback)
+            scoped = f"inbound.verified.check_mail.load_email_accounts"
+            self.bus.on(scoped, self._handle_load_email_accounts)
+
+        except Exception as e:
+            emit_gui_exception_log("EmailCheck._connect_signals", e)
+
+    def _disconnect_signals(self):
+        """Detach bus listeners and clear any buffered lines."""
+        pass
+
+    def _on_close(self):
+        if self._signals_connected:
+            try:
+                if not self._signals_connected:
+                    return
+                self._signals_connected = False
+
+                scoped = f"inbound.verified.check_mail.cmd_list_mailbox"
+                self.bus.off(scoped, self._handle_mailbox_callback)
+                scoped = f"inbound.verified.check_mail.cmd_retrieve_email"
+                self.bus.off(scoped, self._handle_retrieve_callback)
+                scoped = f"inbound.verified.check_mail.load_email_accounts"
+                self.bus.off(scoped, self._handle_load_email_accounts)
+
+            except Exception as e:
+                emit_gui_exception_log("EmailCheck._disconnect_signals", e)
