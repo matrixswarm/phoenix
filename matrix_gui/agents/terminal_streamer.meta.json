@@ -1,0 +1,24 @@
+{
+  "name": "terminal_streamer",
+  "default_universal_id": "terminal-1",
+  "required": {
+    "parent": true,
+    "packet_signing": {
+      "in": true,
+      "out": true
+    }
+  },
+  "ui": {
+    "agent_tree": {
+      "emoji": "\ud83d\udda5\ufe0f"
+    },
+    "panel": [
+      "terminal_streamer.stream_viewer"
+    ]
+  },
+  "roles": [
+    "terminal.stream.start@cmd_start_stream_terminal",
+    "terminal.stream.stop@cmd_stop_stream_terminal",
+    "terminal.allowed.list@cmd_get_allowed_commands"
+  ]
+}

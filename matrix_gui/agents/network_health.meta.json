@@ -1,0 +1,13 @@
+{
+  "name": "network_health",
+  "default_universal_id": "network-health-1",
+  "required": {
+    "parent": true
+  },
+  "ui": {
+    "agent_tree": {
+      "emoji": "\ud83d\udcf6"
+    }
+  },
+  "roles": []
+}

@@ -1,0 +1,13 @@
+{
+  "name": "log_health",
+  "default_universal_id": "log-health",
+  "required": {
+    "parent": true
+  },
+  "ui": {
+    "agent_tree": {
+      "emoji": "\ud83d\udc89"
+    }
+  },
+  "roles": []
+}

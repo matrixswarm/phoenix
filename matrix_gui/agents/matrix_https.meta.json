@@ -1,0 +1,27 @@
+{
+  "name": "matrix_https",
+  "default_universal_id": "matrix-https",
+  "required": {
+    "parent": true,
+    "connection": {
+      "proto": "https",
+      "direction": null
+    },
+    "packet_signing": {
+      "in": true,
+      "out": true
+    },
+    "connection_cert": {
+      "proto": "https"
+    }
+  },
+  "ui": {
+    "agent_tree": {
+      "emoji": "\ud83c\udf10"
+    },
+    "panel": [
+      "matrix_https.config"
+    ]
+  },
+  "roles": []
+}

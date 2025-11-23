@@ -1,0 +1,13 @@
+{
+  "name": "redis_watchdog",
+  "default_universal_id": "redis-hammer",
+  "required": {
+    "parent": true
+  },
+  "ui": {
+    "agent_tree": {
+      "emoji": "\ud83c\udfad"
+    }
+  },
+  "roles": []
+}

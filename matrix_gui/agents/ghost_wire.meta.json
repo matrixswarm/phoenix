@@ -1,0 +1,13 @@
+{
+  "name": "ghost_wire",
+  "default_universal_id": "invisible-man",
+  "required": {
+    "parent": true
+  },
+  "ui": {
+    "agent_tree": {
+      "emoji": "\ud83d\udc7b\ufe0f"
+    }
+  },
+  "roles": []
+}

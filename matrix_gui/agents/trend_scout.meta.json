@@ -1,0 +1,27 @@
+{
+  "name": "trend_scout",
+  "default_universal_id": "gamer-in-nova-1",
+  "required": {
+    "parent": true,
+    "packet_signing": {
+      "in": true,
+      "out": true
+    },
+    "symmetric_encryption": {
+      "type": "aes"
+    }
+  },
+  "ui": {
+    "agent_tree": {
+      "emoji": "\ud83d\udcc8"
+    },
+    "panel": [
+      "trend_scout.trend_ingest"
+    ]
+  },
+  "roles": [
+    "hive.trend_scout.push_local@cmd_push_local",
+    "hive.trend_scout.update_config@cmd_update_config",
+    "hive.trend_scout.status@cmd_status"
+  ]
+}

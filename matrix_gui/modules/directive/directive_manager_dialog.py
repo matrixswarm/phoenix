@@ -32,7 +32,7 @@ from PyQt6.QtWidgets import QInputDialog, QListWidget, QPushButton, QTextEdit, Q
 from matrix_gui.modules.vault.crypto.deploy_tools import write_encrypted_bundle_to_file
 from matrix_gui.modules.directive.deployment.wrapper import agent_aggregator_wrapper, agent_connection_wrapper, agent_cert_wrapper, agent_directive_wrapper , agent_signing_cert_wrapper, agent_symmetric_encryption_wrapper
 from matrix_gui.modules.vault.ui.dump_vault_popup import DumpVaultPopup
-
+from matrix_gui.modules.directive.graph.swarm_workspace import SwarmWorkspaceDialog
 
 class DirectiveManagerDialog(QDialog):
     vault_updated = QtCore.pyqtSignal(dict)
@@ -368,8 +368,9 @@ class DirectiveManagerDialog(QDialog):
                         return
 
             # Step 3. Launch the graph workspace
-            from matrix_gui.modules.directive.graph.swarm_workspace import SwarmWorkspaceDialog
-            dlg = SwarmWorkspaceDialog(directive, verified_path, parent=self)
+            # grab path from vault or prompt logic will run inside
+            agents_root = (self.vault_data or {}).get("last_agent_path", "")
+            dlg = SwarmWorkspaceDialog(directive, agents_root)
             dlg.exec()
 
         except Exception as e:
@@ -641,10 +642,16 @@ class DirectiveManagerDialog(QDialog):
             write_encrypted_bundle_to_file(bundle, out_path)
 
             # Swarm key path
-            print(f"[DEPLOY] Writing swarm key to {key_path}")
-            with open(key_path, "w", encoding="utf-8") as f:
-                f.write(base64.b64encode(aes_key).decode())
-            os.chmod(key_path, 0o600)
+            if not bool(opts.get("railgun_enabled", False)):
+                # Only save to disk if Railgun is NOT used
+                print(f"[DEPLOY] Writing swarm key to {key_path}")
+                with open(key_path, "w", encoding="utf-8") as f:
+                    f.write(base64.b64encode(aes_key).decode())
+                os.chmod(key_path, 0o600)
+            else:
+                # Keep swarm key only in memory
+                swarm_key_mem = base64.b64encode(aes_key).decode()
+                print("[DEPLOY] Railgun active — swarm key held in memory only.")
 
             # step 10. Update deployment record in the vault with encryption details
             with open(out_path, "rb") as f:
@@ -679,7 +686,8 @@ class DirectiveManagerDialog(QDialog):
             if bool(opts.get("railgun_enabled", False)):
                 ssh_cfg = opts.get("railgun_target", None)
                 if ssh_cfg:
-                    self._railgun_upload_and_boot(ssh_cfg, out_path, key_path, opts)
+                    # pass the key directly
+                    self._railgun_upload_and_boot(ssh_cfg, out_path, swarm_key_mem, opts)
 
             # step 11. Show final deploy command to operator
             deploy_cmd = f"""
@@ -705,15 +713,37 @@ class DirectiveManagerDialog(QDialog):
 
         # -------------------------------------------------
 
-    def _railgun_upload_and_boot(self, ssh_meta, local_bundle, swarm_key_path, opts):
-        """Upload encrypted directive + Base64 swarm key to proper location, boot, then purge keys."""
+    def _railgun_upload_and_boot(self, ssh_meta, local_bundle, swarm_key_b64, opts):
+        """Upload directive, inject swarm key via env var, stream live deploy output."""
         try:
+
             host = ssh_meta.get("host")
             user = ssh_meta.get("username")
             port = int(ssh_meta.get("port", 22))
             privkey_pem = ssh_meta.get("private_key")
 
-            # --- SSH Setup ---
+            try:
+
+                # === Railgun Live Deploy Popup ===
+                dlg = QtWidgets.QDialog(self)
+                dlg.setWindowTitle(f"Railgun Deploy: {host}")
+                dlg.resize(800, 500)
+
+                layout = QtWidgets.QVBoxLayout(dlg)
+                output_box = QtWidgets.QTextEdit()
+                output_box.setReadOnly(True)
+                output_box.setStyleSheet(
+                    "background:#000; color:#00ff00; font-family: Consolas, monospace; font-size:12px;"
+                )
+                layout.addWidget(output_box)
+
+                dlg.show()
+                QtWidgets.QApplication.processEvents()
+                output_box.append("[RAILGUN] 🔴 LIVE DEPLOY STREAM 🔴")
+            except Exception as e:
+                QMessageBox.critical(self, "Railgun Deploy Popup", str(e))
+                print(f"[RAILGUN][ERROR] Railgun Deploy Popup Error: {e}")
+
             key = paramiko.RSAKey.from_private_key(io.StringIO(privkey_pem))
             client = paramiko.SSHClient()
             client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
@@ -721,100 +751,80 @@ class DirectiveManagerDialog(QDialog):
             sftp = client.open_sftp()
 
             remote_root = "/matrix/boot_directives"
-            remote_keys_dir = posixpath.join(remote_root, "keys")
-
-            # Ensure directories exist remotely
-            for d in (remote_root, remote_keys_dir):
-                try:
-                    sftp.stat(d)
-                except FileNotFoundError:
-                    sftp.mkdir(d)
-
-            # --- Ensure key is Base64 text ---
-            with open(swarm_key_path, "rb") as f:
-                data = f.read()
-
-            try:
-                base64.b64decode(data, validate=True)
-                print("[RAILGUN] Swarm key already Base64.")
-            except Exception:
-                b64_text = base64.b64encode(data).decode()
-                while len(b64_text) % 4 != 0:
-                    b64_text += "="
-                tmp_b64 = swarm_key_path + ".b64"
-                with open(tmp_b64, "w", newline="\n") as out:
-                    out.write(b64_text.rstrip(" \n\r") + "\n")
-                swarm_key_path = tmp_b64
-                print("[RAILGUN] Converted swarm key to Base64 text (padding normalized).")
-
-            def posix_join(a, b):
-                return posixpath.join(a, ntpath.basename(b))
-
-            remote_bundle = posix_join(remote_root, local_bundle)
-            remote_key = posix_join(remote_keys_dir, swarm_key_path)
-
+            sftp.mkdir(remote_root) if not self._remote_exists(sftp, remote_root) else None
+            remote_bundle = posixpath.join(remote_root, ntpath.basename(local_bundle))
             sftp.put(local_bundle, remote_bundle)
-            print(f"[RAILGUN] Uploaded directive to {remote_bundle}")
-
-            sftp.put(swarm_key_path, remote_key)
-            print(f"[RAILGUN] Uploaded swarm key to {remote_key}")
-
             sftp.close()
 
-            boot_flags = []
-
             universe = opts.get("universe")
-
-            if opts.get("reboot"):       boot_flags.append("--reboot")
-            if opts.get("verbose"):      boot_flags.append("--verbose")
-            if opts.get("debug"):        boot_flags.append("--debug")
-            if opts.get("rug_pull"):     boot_flags.append("--rug-pull")
-            if opts.get("clean"):        boot_flags.append("--clean")
-            if opts.get("reboot_new"):   boot_flags.append("--reboot-new")
-
-            reboot_id = opts.get("reboot_id")
-            if reboot_id:
-                boot_flags.append(f"--reboot-id {reboot_id}")
-
+            boot_flags = []
+            if opts.get("reboot"): boot_flags.append("--reboot")
+            if opts.get("verbose"): boot_flags.append("--verbose")
+            if opts.get("debug"): boot_flags.append("--debug")
+            if opts.get("rug_pull"): boot_flags.append("--rug-pull")
+            if opts.get("clean"): boot_flags.append("--clean")
+            if opts.get("reboot_new"): boot_flags.append("--reboot-new")
+            if opts.get("reboot_id"): boot_flags.append(f"--reboot-id {opts['reboot_id']}")
             boot_flags_str = " ".join(boot_flags)
 
-            # --- Fire matrixd boot ---
+            # Safe inline export – invisible to ps
+            swarm_key = swarm_key_b64.strip()
             cmd = (
-                f"cd /matrix && "
-                f"export SITE_ROOT=/matrix && "
-                f"matrixd boot "
-                f"--universe {universe} "
-                f"--directive {remote_bundle} {boot_flags_str} "
-                f"&& echo '[RAILGUN] Boot complete, cleaning up...' "
-                f"&& sleep 2 "
-                f"&& rm -f {remote_key}"
+                f"cd /matrix && export SITE_ROOT=/matrix && "
+                f"export SWARM_KEY='{swarm_key}' && "
+                f"matrixd boot --universe {universe} --directive {remote_bundle} {boot_flags_str}"
             )
 
-            print(f"[RAILGUN] Executing: {cmd}")
+            print(f"[RAILGUN] Executing remote deploy on {host}...")
 
-            # Execute the command via SSH
-            stdin, stdout, stderr = client.exec_command(cmd)
+            # Create a live PTY channel for real-time output
+            transport = client.get_transport()
+            channel = transport.open_session()
+            channel.get_pty()
+            channel.exec_command(cmd)
 
-            # Dynamically read and print the output line-by-line
-            print("[RAILGUN] Output:")
-            for line in iter(stdout.readline, ""):
-                print(line.strip())  # Dynamically display each line of output
 
-            # Check for errors in the stderr stream
-            error_output = stderr.read().decode().strip()
-            if error_output:
-                print("[RAILGUN ERROR]", error_output)
+            QtWidgets.QApplication.processEvents()
+            while True:
+                if channel.recv_ready():
 
-            # --- Cleanup local temporary Base64 ---
-            try:
-                if swarm_key_path.endswith(".b64"):
-                    os.remove(swarm_key_path)
-                    pass
-            except Exception:
-                pass
+                    chunk = channel.recv(4096).decode(errors="ignore")
+                    try:
+                        output_box.append(chunk)
+                    except Exception as e:
+                        pass
 
-            client.close()
+                    QtWidgets.QApplication.processEvents()
+                if channel.recv_stderr_ready():
+
+                    try:
+                        err = channel.recv_stderr(4096).decode(errors="ignore")
+                        output_box.append(f"<span style='color:red'>{err}</span>")
+                    except Exception as e:
+                        pass
+
+                    QtWidgets.QApplication.processEvents()
+                if channel.exit_status_ready():
+                    break
+
+            exit_code = channel.recv_exit_status()
+            output_box.append(f"\n[RAILGUN] Deploy finished (exit={exit_code})")
+            QtWidgets.QApplication.processEvents()
 
         except Exception as e:
             QMessageBox.critical(self, "Railgun Failed", str(e))
             print(f"[RAILGUN][ERROR] {e}")
+        finally:
+            try:
+                client.close()
+                dlg.exec()  # keep window open until closed
+            except Exception as e:
+                pass
+
+    def _remote_exists(self, sftp, path):
+        try:
+            sftp.stat(path)
+            return True
+        except FileNotFoundError:
+            return False
+

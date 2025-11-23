@@ -1,0 +1,22 @@
+{
+  "name": "telegram_relay",
+  "default_universal_id": "telegram-bot-father-2",
+  "required": {
+    "parent": true,
+    "connection": {
+      "proto": "telegram",
+      "direction": null
+    }
+  },
+  "ui": {
+    "agent_tree": {
+      "emoji": "\ud83d\udce1"
+    }
+  },
+  "roles": [
+    "comm",
+    "comm.security",
+    "comm.*",
+    "hive.alert@cmd_send_alert_msg"
+  ]
+}

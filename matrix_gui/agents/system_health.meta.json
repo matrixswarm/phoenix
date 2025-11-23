@@ -1,0 +1,13 @@
+{
+  "name": "system_health",
+  "default_universal_id": "system-health-1",
+  "required": {
+    "parent": true
+  },
+  "ui": {
+    "agent_tree": {
+      "emoji": "\u2695\ufe0f"
+    }
+  },
+  "roles": []
+}

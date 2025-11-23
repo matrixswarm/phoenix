@@ -1,0 +1,13 @@
+{
+  "name": "gatekeeper",
+  "default_universal_id": "gatekeeper",
+  "required": {
+    "parent": true
+  },
+  "ui": {
+    "agent_tree": {
+      "emoji": "\ud83d\udeaa"
+    }
+  },
+  "roles": []
+}

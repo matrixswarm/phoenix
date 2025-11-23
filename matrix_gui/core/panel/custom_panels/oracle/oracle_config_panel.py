@@ -1,3 +1,4 @@
+# Authored by Daniel F MacDonald and ChatGPT-5 aka The Generals
 import uuid, time
 from PyQt6.QtWidgets import (
     QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QComboBox, QTextEdit, QMessageBox, QWidget

@@ -390,6 +390,37 @@ matrix_directive = {
             }
         },
         {
+            #NOT PRODUCTION READY - DO NOT USE
+            "universal_id": "crypto_bull",
+            "name": "crypto_alert",
+            "lang": "python",
+            "enabled": False,
+            "tags": {
+                "packet_signing": {"in": True, "out": True},
+                "symmetric_encryption": {"type": "aes"}
+            },
+            "config": {
+                "ui": {
+                    "agent_tree": {"emoji": "₿", "icon": ":path_to_icon"},
+                    "panel": [
+                        "crypto_alert.crypto_alert",
+                    ],
+                },
+                "service-manager": [
+                    {
+                        "role": [
+                            "hive.crypto_alert.get_config@cmd_retrieve_config",
+                            "hive.crypto_alert.update_config@cmd_update_alerts",
+                            "hive.crypto_alert.stream_prices@cmd_stream_prices",
+                            "hive.crypto_alert.stop_stream@cmd_stop_stream_prices"
+                        ]
+                    }
+                ],
+                "poll_interval": 20,
+                "alert_role": "hive.swarm_feed.alert",
+            }
+        },
+        {
             "universal_id": "email-dagger",
             "name": "email_send",
             "tags": {

@@ -1,7 +1,7 @@
 # Authored by Daniel F MacDonald and ChatGPT-5 aka The Generals
 import time, re, html, json
 
-from PyQt6.QtWidgets import QMessageBox, QInputDialog, QHBoxLayout, QComboBox, QListWidget,  QGroupBox, QLabel, QVBoxLayout, QTextEdit, QPushButton,  QHBoxLayout, QPushButton, QSpacerItem, QSizePolicy
+from PyQt6.QtWidgets import QMessageBox, QInputDialog, QComboBox, QListWidget,  QGroupBox, QLabel, QVBoxLayout, QTextEdit, QHBoxLayout, QPushButton
 
 from PyQt6.QtCore import QMetaObject, pyqtSlot,QTimer, Qt
 from PyQt6.QtGui import QAction

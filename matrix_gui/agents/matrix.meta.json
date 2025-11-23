@@ -1,0 +1,13 @@
+{
+  "name": "matrix",
+  "default_universal_id": "matrix",
+  "required": {
+    "parent": false,
+    "packet_signing": {
+      "in": true,
+      "out": true
+    }
+  },
+  "ui": {},
+  "roles": []
+}

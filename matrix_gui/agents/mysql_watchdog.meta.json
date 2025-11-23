@@ -1,0 +1,13 @@
+{
+  "name": "mysql_watchdog",
+  "default_universal_id": "mysql-red-phone",
+  "required": {
+    "parent": true
+  },
+  "ui": {
+    "agent_tree": {
+      "emoji": "\ud83d\udee2\ufe0f"
+    }
+  },
+  "roles": []
+}

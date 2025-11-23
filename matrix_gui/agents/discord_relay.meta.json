@@ -1,0 +1,22 @@
+{
+  "name": "discord_relay",
+  "default_universal_id": "discord-delta-5",
+  "required": {
+    "parent": true,
+    "connection": {
+      "proto": "discord",
+      "direction": null
+    }
+  },
+  "ui": {
+    "agent_tree": {
+      "emoji": "\ud83d\udcac"
+    },
+    "panel": [
+      "discord_relay.security_2fa"
+    ]
+  },
+  "roles": [
+    "hive.alert@cmd_send_alert_msg"
+  ]
+}
