@@ -22,8 +22,8 @@ from PyQt6.QtWidgets import (
 from matrix_gui.core.emit_gui_exception_log import emit_gui_exception_log
 
 class DeployOptionsDialog(QDialog):
-    def __init__(self, parent=None, label=None):
-        super().__init__(parent)
+    def __init__(self, ssh_map:dict, label:str):
+        super().__init__()
 
         try:
             self.setWindowTitle("Directive Deployment Options")
@@ -75,11 +75,21 @@ class DeployOptionsDialog(QDialog):
 
             # Input for Universe Name
             self.universe_name_edit = QLineEdit()
+            try:
+                label = label.strip()
+            except Exception:
+                pass
+
+            if(label):
+                self.universe_name_edit.setText(label)
+
             self.universe_name_edit.setPlaceholderText("Universe Name")  # Placeholder text
             rg_lay.addWidget(QLabel("Enter Universe Name:"))
             rg_lay.addWidget(self.universe_name_edit)
 
-            ssh_map = (getattr(parent, "vault_data", {}) or {}).get("connection_manager", {}).get("ssh", {})
+            if not isinstance(ssh_map, dict):
+                ssh_map={}
+
             for sid, meta in ssh_map.items():
                 label = meta.get("label", sid)
                 self.ssh_selector.addItem(f"{label} ({meta.get('host', '?')})", meta)

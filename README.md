@@ -24,7 +24,6 @@ funding open-source maintenance, documentation, and ecosystem growth.
 
 ---
 
-
 #### Built with PyQt6 ≥ 6.6
 #### Python ≥ 3.10 is required
 #### MatrixOS https://github.com/matrixswarm/matrixos required
@@ -42,7 +41,6 @@ This video demonstrates the self-healing power of MatrixSwarm. Even after manual
 [![Designing a MatrixSwarm Deployment with Phoenix Cockpit](https://img.youtube.com/vi/hwQagK71TJc/maxresdefault.jpg)](https://www.youtube.com/watch?v=hwQagK71TJc)
 note: this is the old cockpit design
 ---
-
 ## ⚡ Quick Start
 
 ### Install
@@ -50,7 +48,6 @@ note: this is the old cockpit design
 ```bash
   pip install -e .
 ```
-
 ### Unlock Vault
 
 When Phoenix starts, you’ll see only the 🔐 UNLOCK button.
@@ -133,11 +130,198 @@ Click an agent → inspect threads, spawn count, flip-tripping alerts, and confi
 ```bash
   matrixd boot --universe phoenix
 ```
-
 Matrix auto-resolves the directive + key, decrypts in memory, and spawns the agents slice by slice.
 
 ---
+## Railgun Install (MatrixOS Installer)
 
+Phoenix Cockpit now includes a one-click remote installer for MatrixOS.
+
+This feature lets you deploy MatrixOS onto any remote Linux server without SSH terminals, Putty, or manual setup.
+
+You’ll find it in the top chrome:
+
+⚡ Railgun ▾
+   → Install MatrixOS…
+   → Check Remote Host…
+   → Reinstall / Overwrite…
+
+### Railgun → Install MatrixOS
+
+This dialog lets you push a full MatrixOS installation to any SSH-reachable server.
+
+1. Choose a Source
+
+You can install MatrixOS in three ways:
+
+• Use Local MatrixOS Folder
+– Select your local matrixos/ project directory.
+– Phoenix bundles only the required install manifest (agents/, core/, scripts/, requirements.txt).
+
+• Download From GitHub (Stable Release)
+– Phoenix fetches the latest published MatrixOS release ZIP.
+
+• Download From GitHub (Dev Branch)
+– Pulls directly from matrixos:main.
+
+• Custom GitHub Branch
+– Enter any branch name.
+
+No Python or Git required on your local machine.
+
+### 2. Select SSH Target
+
+Railgun uses your vault-stored SSH identities — Under "Connection Manager", which you define first
+no passwords, no keys on disk, no manual SSH.
+
+Select any saved connection:
+
+myserver-1 (192.168.1.20)
+myserver-1 (192.168.1.21)
+myserver-1 (192.168.1.22)
+
+Vault controls everything:
+
+host
+
+username
+
+port
+
+private key
+
+identity label
+
+This is the same identity system Phoenix uses for deploying directives, now used for OS installs.
+
+### 3. Choose Install Path
+
+Default:
+
+/matrix
+
+
+Phoenix will create:
+
+/matrix/
+    agents/
+    core/
+    scripts/
+    boot_directives/
+    boot_directives/keys/
+    requirements.txt
+    venv/
+
+
+Check the box to overwrite an existing installation:
+
+☑ Overwrite existing installation
+
+### 4. Fire Railgun
+
+Click:
+
+⚡ Install MatrixOS
+
+Phoenix will:
+
+Bundle or download MatrixOS
+
+Upload to remote server
+
+Upload installer script
+
+Create the install directory
+
+Extract the manifest
+
+Create a Python venv
+
+Install requirements
+
+Initialize boot_directives/
+
+Install clean /matrix tree
+
+Stream logs in real time
+
+You can watch everything live in the black console pane.
+
+No Putty.
+No SSH shell.
+No copying files.
+No typing commands.
+Just fire.
+
+### Railgun → Check Remote Host
+
+This tool performs a full pre-flight check before install:
+
+SSH reachability
+
+OS type (Rocky/Alma/CentOS/Ubuntu/Debian)
+
+Python3 presence
+
+pip / venv availability
+
+/matrix existence
+
+disk space
+
+system time sanity
+
+existing MatrixOS detection
+
+This helps you diagnose remote hosts before installation.
+
+### Railgun → Reinstall / Overwrite
+
+Runs the same installer but forcibly:
+
+wipes the install directory
+
+reinstalls all MatrixOS files
+
+rebuilds Python venv
+
+Useful when:
+
+upgrading MatrixOS
+
+switching branches
+
+resetting a corrupted system
+
+deploying to a new clean base
+
+### Security Behavior
+
+All SSH keys retrieved from the vault (never written to disk).
+
+Installer bundle streamed over encrypted SSH.
+
+No remote secrets left behind.
+
+No credentials stored on server.
+
+Swarm keys remain local unless directive deploy is performed.
+
+### Why This Matters
+
+Railgun Install transforms MatrixSwarm deployments into true infrastructure:
+
+Install MatrixOS on a brand-new VPS in 30 seconds
+
+Reinstall a machine without ever opening an SSH window
+
+Maintain fleets of servers using Phoenix
+
+Eliminate all manual instructions (“run pip, install python, unzip zip, configure venv…”)
+
+Zero human error
+
+MatrixOS becomes plug-and-fire.
 ---
 
 ### ⚠️ Minimum Requirements for Phoenix Connectivity

@@ -521,9 +521,13 @@ class DirectiveManagerDialog(QDialog):
             except Exception as e:
                 emit_gui_exception_log("DirectiveManagerDialog.deploy_directive.mint_directive_for_deployment", e)
 
+            try:
+                ssh_map=deepcopy(self.vault_data.get("connection_manager", {}).get("ssh", {}))
+            except Exception as e:
+                pass
 
             # step 6. Options Dialog (Clown Car, Hashbang)
-            opts_dialog = DeployOptionsDialog(self, label)
+            opts_dialog = DeployOptionsDialog(ssh_map, label)
             if opts_dialog.exec() != QDialog.DialogCode.Accepted:
                 QMessageBox.information(self, "Cancelled", "Deployment process cancelled by operator.")
                 return
@@ -593,9 +597,7 @@ class DirectiveManagerDialog(QDialog):
                     verified_path = dlg.exec_check()
 
                     if not verified_path:
-                        QMessageBox.warning(
-                            self, "Cancelled", "Deployment cancelled — agent source directory required."
-                        )
+                        QMessageBox.warning( self, "Cancelled", "Deployment cancelled — agent source directory required.")
                         return
 
                     # Cache the verified path for next deployment

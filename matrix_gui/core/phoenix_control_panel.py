@@ -1,3 +1,4 @@
+# Authored by Daniel F MacDonald and ChatGPT-5 aka The Generals
 import uuid
 from PyQt6.QtWidgets import QWidget, QHBoxLayout, QLabel, QPushButton, QMessageBox, QMenu
 from PyQt6 import QtCore
@@ -6,9 +7,13 @@ from PyQt6.QtWidgets import QComboBox
 from matrix_gui.core.event_bus import EventBus
 from matrix_gui.modules.directive.directive_manager_dialog import DirectiveManagerDialog
 from matrix_gui.modules.net.connection_manager_dialog import ConnectionManagerDialog
+
+from matrix_gui.modules.railgun.railgun_check_dialog import RailgunCheckDialog
+from matrix_gui.modules.railgun.railgun_install_dialog import RailgunInstallDialog
+#from matrix_gui.modules.railgun.railgun_reinstall_dialog import RailgunReinstallDialog
+
 from matrix_gui.core.emit_gui_exception_log import emit_gui_exception_log
 from PyQt6.QtWidgets import QFileDialog
-
 
 class PhoenixControlPanel(QWidget):
     """
@@ -30,41 +35,108 @@ class PhoenixControlPanel(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
 
-        self.layout = QHBoxLayout(self)
-        self.layout.setContentsMargins(4, 4, 4, 4)
-        self.layout.setSpacing(8)
+        try:
+            self.layout = QHBoxLayout(self)
+            self.layout.setContentsMargins(4, 4, 4, 4)
+            self.layout.setSpacing(8)
 
-        # === Primary Controls ===
-        self.layout.addWidget(QLabel("Deployment:"))
-        self.deployment_selector = QComboBox()
-        self.layout.addWidget(self.deployment_selector)
+            # === Primary Controls ===
+            self.layout.addWidget(QLabel("Deployment:"))
+            self.deployment_selector = QComboBox()
+            self.layout.addWidget(self.deployment_selector)
 
-        self.connect_btn = QPushButton("🔌 Connect")
-        self.connect_btn.setObjectName("connect")
-        self.connect_btn.clicked.connect(self.launch_deployment_dialog)
-        self.layout.addWidget(self.connect_btn)
+            self.connect_btn = QPushButton("🔌 Connect")
+            self.connect_btn.setObjectName("connect")
+            self.connect_btn.clicked.connect(self.launch_deployment_dialog)
+            self.layout.addWidget(self.connect_btn)
 
-        self.conn_btn = QPushButton("🌐 Connections")
-        self.conn_btn.setObjectName("connMgr")
-        self.conn_btn.clicked.connect(self.launch_connection_manager)
-        self.layout.addWidget(self.conn_btn)
+            self.conn_btn = QPushButton("🌐 Connections")
+            self.conn_btn.setObjectName("connMgr")
+            self.conn_btn.clicked.connect(self.launch_connection_manager)
+            self.layout.addWidget(self.conn_btn)
 
-        self.directives_btn = QPushButton("📄 Directives")
-        self.directives_btn.setObjectName("document")
-        self.directives_btn.clicked.connect(self.open_directive_manager)
-        self.layout.addWidget(self.directives_btn)
+            self.directives_btn = QPushButton("📄 Directives")
+            self.directives_btn.setObjectName("document")
+            self.directives_btn.clicked.connect(self.open_directive_manager)
+            self.layout.addWidget(self.directives_btn)
 
-        self.vault_btn = QPushButton("🔐 Vault")
-        self.vault_btn.setObjectName("vault")
-        self.vault_btn.clicked.connect(self.reopen_vault)
-        self.layout.addWidget(self.vault_btn)
+            #railgun build
+            self.build_railgun_menu()
 
-        # Stretch at end to push controls left
-        self.layout.addStretch()
 
-        # Wire events
-        EventBus.on("vault.unlocked", self.on_vault_unlocked)
-        EventBus.on("vault.update", self.on_vault_update)
+            self.vault_btn = QPushButton("🔐 Vault")
+            self.vault_btn.setObjectName("vault")
+            self.vault_btn.clicked.connect(self.reopen_vault)
+            self.layout.addWidget(self.vault_btn)
+
+
+            # Stretch at end to push controls left
+            self.layout.addStretch()
+
+            # Wire events
+            EventBus.on("vault.unlocked", self.on_vault_unlocked)
+            EventBus.on("vault.update", self.on_vault_update)
+
+        except Exception as e:
+            emit_gui_exception_log("PhoenixControlPanel.__init__", e)
+
+
+    def build_railgun_menu(self):
+
+        try:
+
+            # === Railgun Button ===
+            self.railgun_btn = QPushButton("🗱 Railgun")
+            self.railgun_btn.setObjectName("railgun")
+
+            # Give Railgun a dropdown menu
+            menu = QMenu(self)
+
+            install_action = menu.addAction("Install MatrixOS…")
+            install_action.triggered.connect(self.open_railgun_installer)
+
+            check_action = menu.addAction("Check Remote Host…")
+            check_action.triggered.connect(self.open_railgun_check)
+
+
+            self.railgun_btn.setMenu(menu)
+            self.layout.addWidget(self.railgun_btn)
+
+        except Exception as e:
+            emit_gui_exception_log("PhoenixControlPanel.launch", e)
+
+    def open_railgun_installer(self):
+        """
+        Open the Railgun Install dialog.
+        This will allow selecting:
+        - Local MatrixOS folder OR GitHub download
+        - SSH target (from vault)
+        - Install path
+        - Optional overwrite
+        """
+        try:
+            dlg = RailgunInstallDialog(
+                vault_data=self.vault_data,
+                parent=self
+            )
+            dlg.exec()
+        except Exception as e:
+            emit_gui_exception_log("PhoenixControlPanel.open_railgun_installer", e)
+
+    def open_railgun_check(self):
+        """
+        Remote host inspection via SSH.
+        """
+        try:
+
+            dlg = RailgunCheckDialog(
+                vault_data=self.vault_data,
+                parent=self
+            )
+            dlg.exec()
+        except Exception as e:
+            emit_gui_exception_log("PhoenixControlPanel.open_railgun_check", e)
+
 
     def refresh_deployments(self):
         """Populate the *Deployment* combobox from ``self.vault_data``.
