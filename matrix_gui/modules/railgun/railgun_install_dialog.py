@@ -164,14 +164,15 @@ class RailgunInstallDialog(QDialog):
     # -------------------------------------------------------------
     def _download_github(self):
         try:
+            import zipfile
+            import shutil
+
             mode = self.src_selector.currentText()
 
             if "Stable Release" in mode:
                 url = "https://github.com/matrixswarm/matrixos/archive/refs/tags/latest.zip"
-
             elif "Dev Branch" in mode:
                 url = "https://github.com/matrixswarm/matrixos/archive/refs/heads/main.zip"
-
             else:
                 branch = self.branch_edit.text().strip()
                 if not branch:
@@ -179,13 +180,51 @@ class RailgunInstallDialog(QDialog):
                     return None
                 url = f"https://github.com/matrixswarm/matrixos/archive/refs/heads/{branch}.zip"
 
-            tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".zip")
+            # 1) Download ZIP
+            tmp_zip = tempfile.NamedTemporaryFile(delete=False, suffix=".zip")
             r = requests.get(url, timeout=30)
             r.raise_for_status()
-            tmp.write(r.content)
-            tmp.close()
+            tmp_zip.write(r.content)
+            tmp_zip.close()
 
-            return tmp.name
+            # 2) Extract into temp dir
+            extract_dir = Path(tempfile.mkdtemp(prefix="matrixos_zip_"))
+            with zipfile.ZipFile(tmp_zip.name, "r") as z:
+                z.extractall(extract_dir)
+
+            # 3) Detect top-level folder
+            subdirs = [p for p in extract_dir.iterdir() if p.is_dir()]
+            if len(subdirs) != 1:
+                QMessageBox.critical(None, "GitHub ZIP Error",
+                                     "Could not determine top-level directory in GitHub ZIP.")
+                return None
+
+            top = subdirs[0]
+
+            # 4) Build clean manifest structure
+            clean_dir = Path(tempfile.mkdtemp(prefix="matrixos_clean_"))
+
+            needed_dirs = ["agents", "core", "scripts"]
+            needed_files = ["requirements.txt", "requirements.swarm.txt", "pyproject.toml", "README.md"]
+
+            for d in needed_dirs:
+                src = top / d
+                if src.exists():
+                    shutil.copytree(src, clean_dir / d)
+
+            for f in needed_files:
+                src = top / f
+                if src.exists():
+                    shutil.copy(src, clean_dir / f)
+
+            # 5) Zip the cleaned manifest
+            out_zip = tempfile.NamedTemporaryFile(delete=False, suffix=".zip")
+            with zipfile.ZipFile(out_zip.name, "w", zipfile.ZIP_DEFLATED) as z:
+                for item in clean_dir.rglob("*"):
+                    arc = item.relative_to(clean_dir)
+                    z.write(item, arc)
+
+            return out_zip.name
 
         except Exception as e:
             emit_gui_exception_log("RailgunInstall._download_github", e)
@@ -314,16 +353,23 @@ class RailgunInstallDialog(QDialog):
         fi
         
         echo "[Installer] Preparing directories…"
-
+        
+        {"echo '[Installer] Removing old install…' && rm -rf " + install_path + "/*" if overwrite else ""}
         mkdir -p {install_path}/boot_directives
         mkdir -p {install_path}/boot_directives/keys
         chown -R root:root {install_path}/boot_directives
         chmod 700 {install_path}/boot_directives/keys
 
-        {"echo '[Installer] Removing old install…' && rm -rf " + install_path + "/*" if overwrite else ""}
-
         echo "[Installer] Unpacking source bundle…"
         unzip -o {remote_zip} -d {install_path}
+
+        # Flatten GitHub-style directory wrapper (matrixos-main/, matrixos-branchname/, etc.)
+        top_dir=$(find {install_path} -maxdepth 1 -type d -name "matrixos-*")
+        if [ -n "$top_dir" ]; then
+            echo "[Installer] Flattening GitHub directory structure…"
+            mv "$top_dir"/* {install_path}/
+            rmdir "$top_dir"
+        fi
 
         echo "[Installer] Checking Python…"
         if ! command -v python3 >/dev/null 2>&1; then
@@ -340,7 +386,12 @@ class RailgunInstallDialog(QDialog):
 
         echo "[Installer] Installing requirements…"
         pip install --upgrade pip
-        pip install -r {install_path}/matrixos*/requirements.txt || true
+        pip install -r {install_path}/requirements.txt || true
+
+        # matrixd symlink
+        echo "[Installer] Linking matrixd globally…"
+        ln -sf {install_path}/scripts/matrixd /usr/local/bin/matrixd
+        chmod +x /usr/local/bin/matrixd
 
         echo "[Installer] MatrixOS install complete."
         """
