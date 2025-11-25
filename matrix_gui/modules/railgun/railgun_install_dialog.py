@@ -44,9 +44,9 @@ class RailgunInstallDialog(QDialog):
         self.src_selector = QComboBox()
         self.src_selector.addItems([
             "Use Local MatrixOS Folder",
-            "Download From GitHub (Stable Release)",
+            #"Download From GitHub (Stable Release)",
             "Download From GitHub (Dev Branch: main)",
-            "Download From GitHub (Custom Branch)"
+            #"Download From GitHub (Custom Branch)"
         ])
         src_box.addWidget(self.src_selector, 0, 1)
 
