@@ -772,8 +772,10 @@ class DirectiveManagerDialog(QDialog):
             # Safe inline export – invisible to ps
             swarm_key = swarm_key_b64.strip()
             cmd = (
-                f"cd /matrix && export SITE_ROOT=/matrix && "
+                f"cd /matrix && "
+                f"export SITE_ROOT=/matrix && "
                 f"export SWARM_KEY='{swarm_key}' && "
+                f"[ -d /matrix/venv ] && source /matrix/venv/bin/activate || echo '[RAILGUN] No venv detected' && "
                 f"matrixd boot --universe {universe} --directive {remote_bundle} {boot_flags_str}"
             )
 
