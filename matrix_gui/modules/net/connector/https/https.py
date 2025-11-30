@@ -74,6 +74,7 @@ class HTTPSConnector(BaseConnector):
                 print(f"[HTTPSConnector][{uid}] ❌ Invalid private key: {e}")
                 self._set_status("disconnected")
                 return None
+
             sig_b64 = sign_data(inner, priv_key)
 
             outer = {"sig": sig_b64, "content": inner}

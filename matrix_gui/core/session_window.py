@@ -95,7 +95,12 @@ def run_session(session_id, conn):
                     "Missing:\n - " + "\n - ".join(missing) +
                     "\n\nAdd them to your directive before launching this session."
                 )
-                QMessageBox.critical(None, "Missing Core Agents", msg_text)
+                box = QMessageBox(QMessageBox.Icon.Critical,
+                                  "Missing Core Agents",
+                                  msg_text,
+                                  parent=app.activeWindow())
+                box.setWindowModality(Qt.WindowModality.ApplicationModal)
+                box.exec()
                 print(f"[SESSION][ABORT] Deployment missing core agents: {missing}")
                 return
             else:
@@ -333,39 +338,49 @@ class SessionWindow(QMainWindow):
             emit_gui_exception_log("session_window._build_tree_panel", e)
 
     def _handle_agent_selected(self, session_id, node, panels=None, **_):
+
         if not panels:
             # No specialty panels -> stay where you are
             return
 
-        all_buttons = []
+        try:
 
-        for panel_name in panels:
-            panel = self._load_custom_panel(panel_name, node)
-            if panel and hasattr(panel, "get_panel_buttons"):
-                panel_buttons = panel.get_panel_buttons() or []
-                if panel_buttons:
-                    print(f"[DEBUG] {panel_name} returned {len(panel_buttons)} buttons")
-                    # Defer showing panel until its button is clicked
-                    for btn in panel_buttons:
-                        # wrap handler so it switches panel when clicked
-                        def make_handler(real_handler, p=panel):
-                            def _wrapped():
-                                if real_handler:
-                                    real_handler()
-                                self.stacked.setCurrentWidget(p)
+            all_buttons = []
 
-                            return _wrapped
+            for panel_name in panels:
+                panel = self._load_custom_panel(panel_name, node)
+                if panel and hasattr(panel, "get_panel_buttons"):
+                    panel_buttons = panel.get_panel_buttons() or []
+                    if panel_buttons:
 
-                        all_buttons.append(PanelButton(btn.icon, btn.text, make_handler(btn.handler, panel)))
+                        print(f"[DEBUG] {panel_name} returned {len(panel_buttons)} buttons")
+                        # Defer showing panel until its button is clicked
+                        for btn in panel_buttons:
+                            # wrap handler so it switches panel when clicked
+                            def make_handler(real_handler, p=panel):
+                                def _wrapped():
+                                    if real_handler:
+                                        real_handler()
+                                    self.stacked.setCurrentWidget(p)
+
+                                return _wrapped
+
+                            all_buttons.append(PanelButton(btn.icon, btn.text, make_handler(btn.handler, panel)))
+                else:
+                    print(f"[DEBUG] {panel_name} has no usable buttons, ignoring")
+
+            # Only update toolbar if we actually collected something
+            if all_buttons:
+                self.control_bar.clear_secondary_buttons()
+                self.control_bar.add_secondary_buttons(all_buttons)
             else:
-                print(f"[DEBUG] {panel_name} has no usable buttons, ignoring")
+                self.control_bar.clear_secondary_buttons()
 
-        # Only update toolbar if we actually collected something
-        if all_buttons:
-            self.control_bar.clear_secondary_buttons()
-            self.control_bar.add_secondary_buttons(all_buttons)
-        else:
-            self.control_bar.clear_secondary_buttons()
+        except Exception as e:
+            emit_gui_exception_log("SessionWindow._handle_agent_selected", e)
+            return None
+
+
 
     def _load_custom_panel(self, panel_name, node):
 

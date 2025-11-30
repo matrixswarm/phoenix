@@ -29,6 +29,7 @@ class EmailConnectionEditor(ConnectionEditorInterface):
         self.smtp_port = QLineEdit()
         self.smtp_user = QLineEdit()
         self.smtp_pass = QLineEdit()
+        self.smtp_to = QLineEdit()
         self.smtp_pass.setEchoMode(QLineEdit.EchoMode.Password)
 
         # === Incoming fields ===
@@ -70,6 +71,7 @@ class EmailConnectionEditor(ConnectionEditorInterface):
         out_form = QFormLayout(out_page)
         out_form.addRow("SMTP Server", self.smtp_server)
         out_form.addRow("SMTP Port", self.smtp_port)
+        out_form.addRow("Send To", self.smtp_to)
         out_form.addRow("Username", self.smtp_user)
         out_form.addRow("Password", self.smtp_pass)
         out_form.addRow("Encryption", self.smtp_encryption)
@@ -125,6 +127,7 @@ class EmailConnectionEditor(ConnectionEditorInterface):
             self.smtp_port.setText(str(data.get("smtp_port", "")))
             self.smtp_user.setText(data.get("smtp_username", ""))
             self.smtp_pass.setText(data.get("smtp_password", ""))
+            self.smtp_to.setText(data.get("smtp_to", ""))
             self.smtp_encryption.setCurrentText(data.get("smtp_encryption", "SSL"))
 
     # --------------------------------
@@ -143,6 +146,7 @@ class EmailConnectionEditor(ConnectionEditorInterface):
                 "type": "outgoing",
                 "smtp_server": self.smtp_server.text().strip(),
                 "smtp_port": int(self.smtp_port.text() or 0),
+                "smtp_to": self.smtp_to.text().strip(),
                 "smtp_username": self.smtp_user.text().strip(),
                 "smtp_password": self.smtp_pass.text().strip(),
                 "smtp_encryption": self.smtp_encryption.currentText(),

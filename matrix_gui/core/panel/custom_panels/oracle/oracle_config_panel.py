@@ -136,10 +136,10 @@ class OracleConfigPanel(PhoenixPanelInterface):
             emit_gui_exception_log("OracleConfigPanel._send_test_prompt", e)
 
     def _connect_signals(self):
-        self.bus.on(f"inbound.verified.oracle_panel.result.{self.session_id}", self._handle_oracle_result)
+        self.bus.on(f"inbound.verified.oracle_panel.result", self._handle_oracle_result)
 
     def _disconnect_signals(self):
-        self.bus.off(f"inbound.verified.oracle_panel.result.{self.session_id}", self._handle_oracle_result)
+        self.bus.off(f"inbound.verified.oracle_panel.result", self._handle_oracle_result)
 
     def _handle_oracle_result(self, session_id, channel, source, payload, ts):
         try:

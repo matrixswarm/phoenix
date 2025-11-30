@@ -312,7 +312,6 @@ class DirectiveManagerDialog(QDialog):
                     data=self.vault_data
                 )
                 self.refresh_lists()
-                QMessageBox.information(self, "Directive Deleted", f"Directive {directive_id} deleted.")
 
         except Exception as e:
             emit_gui_exception_log("DirectiveManagerDialog.delete_saved_directive", e)
@@ -776,7 +775,8 @@ class DirectiveManagerDialog(QDialog):
                 f"export SITE_ROOT=/matrix && "
                 f"export SWARM_KEY='{swarm_key}' && "
                 f"[ -d /matrix/venv ] && source /matrix/venv/bin/activate || echo '[RAILGUN] No venv detected' && "
-                f"matrixd boot --universe {universe} --directive {remote_bundle} {boot_flags_str}"
+                f"(matrixd boot --universe {universe} --directive {remote_bundle} {boot_flags_str}) "
+                f"2>&1 | tee /matrix/railgun_deploy.log"
             )
 
             print(f"[RAILGUN] Executing remote deploy on {host}...")

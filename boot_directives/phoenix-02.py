@@ -288,6 +288,82 @@ matrix_directive = {
             },
         },
         {
+            "universal_id": "tripwire-guard-1",
+            "name": "tripwire_lite",
+            "lang": "python",
+            "tags": {
+                "packet_signing": {"in": True, "out": True},
+                "symmetric_encryption": {"type": "aes"}
+            },
+
+            "config": {
+                "ui": {
+                    "agent_tree": {"emoji": "🛡️"},
+                    "panel": ["tripwire_lite.tripwire_lite"]   # optional, safe to leave even if no panel built yet
+                },
+
+                # ---- CORE TRIPWIRE v2 SETTINGS ----
+                "watch_paths": [
+                    { "path": "/var/www", "recursive": True, "watch_dirs": True, "watch_files": True},
+                    { "path": "/matrix/agents", "recursive": True, "watch_dirs": True, "watch_files": True},
+                    { "path": "/matrix/core",   "recursive": True, "watch_dirs": True, "watch_files": True},
+                    { "path": "/matrix/boot_directives",   "recursive": True, "watch_dirs": True, "watch_files": True},
+                    { "path": "/your/webserver/or/whatever/youwant", "recursive": False, "watch_dirs": True, "watch_files": True},
+                ],
+                "ignore_paths": [
+                    "/matrix/universes"
+                ],
+
+                "quarantine_root": "/matrix/quarantine",
+
+                # Safety first → dry run ON until verified
+                "dry_run": True,
+                "enforce": False,
+
+                # Watcher interval
+                "interval": 5,
+
+                # Allowed/suspicious file types
+                "allowed_extensions": [
+                    ".html", ".htm", ".css", ".js", ".json",
+                    ".png", ".jpg", ".jpeg", ".gif", ".svg",
+                    ".webp", ".woff", ".woff2"
+                ],
+
+                "suspicious_extensions": [
+                    ".php", ".phtml", ".phps", ".sh", ".py", ".pl",
+                    ".cgi", ".exe", ".bin", ".so"
+                ],
+
+                # Security roles
+                "alert_to_role": "hive.alert",
+                "rpc_router_role": "hive.rpc",
+
+                # Avoid alert spam
+                "cooldown": 900,  # 15 mins
+
+                # ---- SERVICE MANAGER → tells Matrix which commands Tripwire accepts ----
+                "service-manager": [
+                    {
+                        "role": [
+                            "tripwire.guard.status@cmd_list_status",
+                            "tripwire.guard.toggle_enforce@cmd_toggle_enforce",
+                            "tripwire.guard.toggle_dry_run@cmd_toggle_dry_run",
+
+                            "tripwire.guard.list_alerts@cmd_list_alerts",
+                            "tripwire.guard.restore_item@cmd_restore_item",
+                            "tripwire.guard.restore_all@cmd_restore_all",
+                            "tripwire.guard.delete_alert@cmd_delete_alert",
+                            "tripwire.guard.reset@cmd_tripwire_reset"
+                        ],
+                        "scope": ["parent", "any"],
+                        "priority": { "default": 10 }
+                    }
+                ]
+
+            }
+        },
+        {
             "universal_id": "terminal-1",
             "name": "terminal_streamer",
             "tags": {
@@ -357,6 +433,8 @@ matrix_directive = {
                 "ui": {
                     "agent_tree": {"emoji": "🚪"},
                 },
+                "ignore_ips": [
+                ],
                 "log_path": "/var/log/auth.log",
                 "maxmind_db": "GeoLite2-City.mmdb",
                 "geoip_enabled": 1,

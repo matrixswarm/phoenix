@@ -428,10 +428,11 @@ class CryptoAlert(PhoenixPanelInterface):
     def _on_close(self):
         if self._signals_connected:
             try:
-                self._signals_connected = False
                 self.bus.off("inbound.verified.crypto_alert.update",
                              self._handle_price_update)
                 self.bus.off("inbound.verified.crypto_alert.config",
                              self._handle_config_update)
+                self._signals_connected = False
+
             except Exception as e:
                 emit_gui_exception_log("CryptoAlert._disconnect_signals", e)

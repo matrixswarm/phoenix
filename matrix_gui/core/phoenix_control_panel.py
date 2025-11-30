@@ -63,7 +63,6 @@ class PhoenixControlPanel(QWidget):
             #railgun build
             self.build_railgun_menu()
 
-
             self.vault_btn = QPushButton("🔐 Vault")
             self.vault_btn.setObjectName("vault")
             self.vault_btn.clicked.connect(self.reopen_vault)

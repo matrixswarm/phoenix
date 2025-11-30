@@ -1,29 +1,61 @@
 import sys
 import traceback
-from matrix_gui.core.event_bus import EventBus  # or your actual path
+from matrix_gui.core.event_bus import EventBus
+from PyQt6.QtWidgets import QMessageBox
 
 def emit_gui_exception_log(label: str, exception: Exception):
-    exc_type, exc_value, exc_tb = sys.exc_info()
-    trace = traceback.extract_tb(exc_tb)
+    try:
 
-    if not trace:
-        return  # no traceback
+        msg = str(exception).strip() or "⚠️ Unknown GUI error"
+        print(f"\n🔥[EXCEPTION][{label}] {msg}")
 
-    last = trace[-1]
 
-    payload = {
-        "label": label,
-        "exception_type": type(exception).__name__,
-        "exception_message": str(exception),
-        "file": last.filename,
-        "line": last.lineno,
-        "function": last.name,
-        "traceback": traceback.format_exc()
-    }
+        # Safe fallback string
+        exception_message = str(exception).strip() or "⚠️ Unhandled GUI error (no message)"
+        exc_type, exc_value, exc_tb = sys.exc_info()
+        trace = traceback.extract_tb(exc_tb) if exc_tb else []
 
-    #Print to terminal for local dev
-    print(f"\n[EXCEPTION][{label}] {payload['exception_type']}: {payload['exception_message']}")
-    print(f"📁 {payload['file']}:{payload['line']} in {payload['function']}")
-    print("🔍 Traceback:\n" + payload["traceback"])
+        if not trace:
+            trace_info = "[NO TRACEBACK AVAILABLE]"
+            file = "unknown"
+            line = -1
+            function = "unknown"
+        else:
+            last = trace[-1]
+            file = last.filename
+            line = last.lineno
+            function = last.name
+            trace_info = traceback.format_exc()
 
-    EventBus.emit("gui.log.exception", payload)
+        payload = {
+            "label": label,
+            "exception_type": type(exception).__name__,
+            "exception_message": exception_message,
+            "file": file,
+            "line": line,
+            "function": function,
+            "traceback": trace_info
+        }
+
+        print(f"\n[EXCEPTION][{label}] {payload['exception_type']}: {payload['exception_message']}")
+        print(f"📁 {file}:{line} in {function}")
+        print("🔍 Traceback:\n" + trace_info)
+
+        # emit to Phoenix event bus
+        EventBus.emit("gui.log.exception", payload)
+
+        # optional GUI message (non-blocking, non-crashing)
+        _safe_show_gui_error(label, exception_message)
+
+    except Exception as fallback:
+        print(f"[LOGGING ERROR] Failed to log GUI exception: {fallback}")
+
+
+def _safe_show_gui_error(title: str, message: str):
+    try:
+        if not message.strip():
+            return
+        # message must be plain text
+        QMessageBox.critical(None, f"Tripwire GUI — {title}", message)
+    except Exception as inner:
+        print(f"[FATAL GUI] Could not display message box: {inner}")
