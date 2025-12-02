@@ -43,7 +43,6 @@ class PluginGuard(PhoenixPanelInterface):
         self._update_timer.timeout.connect(self._drain_updates)
         self._update_timer.start()
         self.setLayout(self._build_layout())
-        self._connect_signals()
         self.auto_scroll = True
         self.output_box.setOpenExternalLinks(False)
         self.output_box.setTextInteractionFlags(

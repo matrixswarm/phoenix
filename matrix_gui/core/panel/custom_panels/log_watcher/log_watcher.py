@@ -105,15 +105,14 @@ class LogWatcher(PhoenixPanelInterface):
         pass
 
     def _on_close(self):
-        if self._signals_connected:
-            try:
-                if self._signals_connected:
-                    scoped = "inbound.verified.logwatch_panel.update"
-                    self.bus.off(scoped, self._handle_output)
-                    print("[LOGWATCH] 🔕 Disconnected from", scoped)
-                    self._pending_lines.clear()
-            except Exception as e:
-                emit_gui_exception_log("LogWatcher._disconnect_signals", e)
+        try:
+            if self._signals_connected:
+                scoped = "inbound.verified.logwatch_panel.update"
+                self.bus.off(scoped, self._handle_output)
+                print("[LOGWATCH] 🔕 Disconnected from", scoped)
+                self._pending_lines.clear()
+        except Exception as e:
+            emit_gui_exception_log("LogWatcher._disconnect_signals", e)
 
 
     # --- Core logic ---

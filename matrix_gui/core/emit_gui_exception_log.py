@@ -3,7 +3,7 @@ import traceback
 from matrix_gui.core.event_bus import EventBus
 from PyQt6.QtWidgets import QMessageBox
 
-def emit_gui_exception_log(label: str, exception: Exception):
+def emit_gui_exception_log(label: str, exception: Exception, show_safe_message=False):
     try:
 
         msg = str(exception).strip() or "⚠️ Unknown GUI error"
@@ -44,8 +44,8 @@ def emit_gui_exception_log(label: str, exception: Exception):
         # emit to Phoenix event bus
         EventBus.emit("gui.log.exception", payload)
 
-        # optional GUI message (non-blocking, non-crashing)
-        _safe_show_gui_error(label, exception_message)
+        if bool(show_safe_message):
+            _safe_show_gui_error(label, exception_message)
 
     except Exception as fallback:
         print(f"[LOGGING ERROR] Failed to log GUI exception: {fallback}")

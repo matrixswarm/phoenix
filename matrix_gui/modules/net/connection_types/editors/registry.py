@@ -6,6 +6,7 @@ from .telegram_editor import TelegramConnectionEditor
 from .openai_editor import OpenAIConnectionEditor
 from .slack_editor import SlackConnectionEditor
 from .ssh_editor import SSHConnectionEditor
+from .mysql_editor import MySQLConnectionEditor
 
 CONNECTION_EDITOR_REGISTRY = {
     "https": HTTPSConnectionEditor,
@@ -16,4 +17,5 @@ CONNECTION_EDITOR_REGISTRY = {
     "openai": OpenAIConnectionEditor,
     "slack": SlackConnectionEditor,
     "ssh": SSHConnectionEditor,
+    "mysql": MySQLConnectionEditor,
 }

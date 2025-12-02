@@ -23,7 +23,6 @@ class TripwireLite(PhoenixPanelInterface):
 
     cache_panel = True  # keep panel cached like TrendIngest
 
-
     def __init__(self, session_id, bus=None, node=None, session_window=None):
         super().__init__(session_id, bus, node=node, session_window=session_window)
 
@@ -567,18 +566,17 @@ class TripwireLite(PhoenixPanelInterface):
 
     def _connect_signals(self):
         try:
-            if self._signals_connected:
-                return
+            if not self._signals_connected:
 
-            self.bus.on("inbound.verified.tripwire_panel.status_ack", self._status_ack)
-            self.bus.on("inbound.verified.tripwire_panel.enforce_ack", self._enforce_ack)
-            self.bus.on("inbound.verified.tripwire_panel.dryrun_ack", self._dryrun_ack)
-            self.bus.on("inbound.verified.tripwire_panel.reset_ack", self._reset_ack)
-            self.bus.on("inbound.verified.tripwire_panel.alerts_rx", self._alerts_rx)
-            self.bus.on("inbound.verified.tripwire_panel.restore_ack", self._restore_ack)
-            self.bus.on("inbound.verified.tripwire_panel.restore_all_ack", self._restore_all_ack)
-            self.bus.on("inbound.verified.tripwire_panel.delete_ack", self._delete_ack)
-            self._signals_connected = True
+                self.bus.on("inbound.verified.tripwire_panel.status_ack", self._status_ack)
+                self.bus.on("inbound.verified.tripwire_panel.enforce_ack", self._enforce_ack)
+                self.bus.on("inbound.verified.tripwire_panel.dryrun_ack", self._dryrun_ack)
+                self.bus.on("inbound.verified.tripwire_panel.reset_ack", self._reset_ack)
+                self.bus.on("inbound.verified.tripwire_panel.alerts_rx", self._alerts_rx)
+                self.bus.on("inbound.verified.tripwire_panel.restore_ack", self._restore_ack)
+                self.bus.on("inbound.verified.tripwire_panel.restore_all_ack", self._restore_all_ack)
+                self.bus.on("inbound.verified.tripwire_panel.delete_ack", self._delete_ack)
+                self._signals_connected = True
 
         except Exception as e:
             emit_gui_exception_log("CryptoAlert._connect_signals", e)
@@ -587,8 +585,10 @@ class TripwireLite(PhoenixPanelInterface):
         pass
 
     def _on_close(self):
-        if self._signals_connected:
-            try:
+
+        try:
+            if self._signals_connected:
+
                 self.bus.off("inbound.verified.tripwire_panel.status_ack", self._status_ack)
                 self.bus.off("inbound.verified.tripwire_panel.enforce_ack", self._enforce_ack)
                 self.bus.off("inbound.verified.tripwire_panel.dryrun_ack", self._dryrun_ack)
@@ -599,6 +599,5 @@ class TripwireLite(PhoenixPanelInterface):
                 self.bus.off("inbound.verified.tripwire_panel.delete_ack", self._delete_ack)
                 self._signals_connected = False
 
-            except Exception as e:
-                emit_gui_exception_log("CryptoAlert._disconnect_signals", e)
-
+        except Exception as e:
+            emit_gui_exception_log("CryptoAlert._disconnect_signals", e)

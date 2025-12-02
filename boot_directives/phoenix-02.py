@@ -761,6 +761,7 @@ matrix_directive = {
             "universal_id": "golden-child-4",
             "name": "oracle",
             "tags": {
+                "packet_signing": {"in": True, "out": True},
                 "connection": {"proto": "openai"}
             },
             "config": {

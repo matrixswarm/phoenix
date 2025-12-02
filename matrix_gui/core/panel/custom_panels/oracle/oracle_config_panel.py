@@ -15,7 +15,6 @@ class OracleConfigPanel(PhoenixPanelInterface):
         super().__init__(session_id, bus, node=node, session_window=session_window)
         self.setLayout(self._build_ui())
         self.node=node
-        self._connect_signals()
 
     def _build_ui(self):
         layout = QVBoxLayout()
@@ -80,12 +79,20 @@ class OracleConfigPanel(PhoenixPanelInterface):
 
     def _save_config(self):
         try:
+
             api_key = self.api_key_edit.text().strip()
             model = self.model_combo.currentText()
             response_mode = self.response_combo.currentText()
 
-            # Build config dict dynamically — only include non-empty fields
-            new_cfg = {"model": model, "response_mode": response_mode}
+
+            new_cfg={}
+
+            if model:
+                new_cfg["model"] = model
+
+            if response_mode:
+                new_cfg["response_mode"] = response_mode
+
             if api_key:
                 new_cfg["api_key"] = api_key  # update only if provided
 
@@ -95,47 +102,82 @@ class OracleConfigPanel(PhoenixPanelInterface):
                 "content": {
                     "target_universal_id": self.node.get("universal_id", "oracle"),
                     "config": new_cfg,
-                    "push_live_config": True
+                    "push_live_config": 1
                 },
                 "ts": time.time()
             })
 
-            self.bus.emit("outbound.message",
-                          session_id=self.session_id,
-                          channel="outgoing.command",
-                          packet=pk)
+            self.bus.emit(
+                "outbound.message",
+                session_id=self.session_id,
+                channel="outgoing.command",
+                packet=pk
+            )
+
             QMessageBox.information(self, "Saved",
-                                    "Oracle configuration update sent.\n"
-                                    "(Empty API Key field leaves existing key unchanged.)")
+                                    "Oracle configuration updated safely.")
 
         except Exception as e:
             emit_gui_exception_log("OracleConfigPanel._save_config", e)
 
-
     def _send_test_prompt(self):
         try:
-
             prompt = self.prompt_box.toPlainText().strip()
             if not prompt:
                 QMessageBox.warning(self, "No Prompt", "Enter a prompt to test.")
                 return
 
+            token = str(uuid.uuid4())
+
+            # NEW Oracle chat-style messages
+            messages = [
+                {
+                    "role": "system",
+                    "content": (
+                        "You are Oracle, responding to test prompts from the Phoenix Oracle Panel. "
+                        "Respond briefly unless the user selects 'verbose'."
+                    )
+                },
+                {
+                    "role": "user",
+                    "content": prompt
+                },
+            ]
+
             pk = Packet()
             pk.set_data({
-                "handler": "cmd_msg_prompt",
+                "handler": "cmd_service_request",
                 "ts": time.time(),
                 "content": {
-                    "prompt": prompt,
-                    "target_universal_id": "oracle",
-                    "query_id": str(uuid.uuid4()),
-                    "return_handler": "oracle_panel.result"
+                    "service": "hive.oracle",
+                    "payload": {
+                        "session_id": self.session_id,
+                        "token": token,
+                        "rpc_role": "hive.rpc",
+                        "return_handler": "oracle_panel.result",
+                        "target_universal_id": self.node.get("universal_id", "oracle"),
+                        "messages": messages,  #
+                        "response_mode": self.response_combo.currentText(),
+                        "use_callback": True,
+                    }
                 }
             })
-            self.bus.emit("outbound.message", session_id=self.session_id, channel="outgoing.command", packet=pk)
+
+            self.bus.emit(
+                "outbound.message",
+                session_id=self.session_id,
+                channel="outgoing.command",
+                packet=pk,
+            )
+
+            self.output_box.clear()
+            self.output_box.append("⏳ Sending prompt to Oracle...\n")
+
         except Exception as e:
             emit_gui_exception_log("OracleConfigPanel._send_test_prompt", e)
 
     def _connect_signals(self):
+
         self.bus.on(f"inbound.verified.oracle_panel.result", self._handle_oracle_result)
 
     def _disconnect_signals(self):
@@ -144,8 +186,11 @@ class OracleConfigPanel(PhoenixPanelInterface):
     def _handle_oracle_result(self, session_id, channel, source, payload, ts):
         try:
             content = payload.get("content", {})
+
             response = content.get("response", "(no response)")
-            self.output_box.append(f"> {response}")
+            # Separator if you *don’t* clear between calls
+            self.output_box.append("\n" + "=" * 40 + "\n🔮 Oracle Reply:\n")
+            self.output_box.append(response)
         except Exception as e:
             emit_gui_exception_log("OracleConfigPanel._handle_oracle_result", e)
 

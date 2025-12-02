@@ -208,14 +208,27 @@ class ConnectionManagerDialog(QtWidgets.QDialog):
             if not existing:
                 return
 
-            # Open editor
-            conn_id_new, data = edit_connection_dialog(
-                self,
-                default_proto=existing.get("proto", proto),
-                data=existing,
-                conn_id=conn_id,
-                new_conn=False
-            )
+            conn_id_new = None
+            data = None
+
+            try:
+                # Open editor
+                result = edit_connection_dialog(
+                    self,
+                    default_proto=existing.get("proto", proto),
+                    data=existing,
+                    conn_id=conn_id,
+                    new_conn=False
+                )
+
+                # Ensure the result is a tuple with two elements or handle it safely
+                if result and isinstance(result, tuple) and len(result) == 2:
+                    conn_id_new, data = result
+                else:
+                    conn_id_new, data = None, None
+
+            except Exception as e:
+                emit_gui_exception_log("ConnectionManagerDialog._edit_row", e)
 
             if not conn_id_new:
                 return

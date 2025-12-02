@@ -68,6 +68,18 @@ CERT_INJECTION_MAP = {
             ]
 
         },
+        "mysql": {
+                "target": ["config", "mysql"],
+                "fields": [
+                    "host",
+                    "port",
+                    "username",
+                    "password",
+                    "database",
+                    "serial",
+                    "default_channel"
+                ]
+            },
     },
 
 }

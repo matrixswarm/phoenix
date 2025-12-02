@@ -689,24 +689,24 @@ class DirectiveManagerDialog(QDialog):
                 if ssh_cfg:
                     # pass the key directly
                     self._railgun_upload_and_boot(ssh_cfg, out_path, swarm_key_mem, opts)
-
-            # step 11. Show final deploy command to operator
-            deploy_cmd = f"""
-            🚀 Your directive has been encrypted and saved.
-
-            Directive: {out_path}
-            Swarm Key: /matrix/boot_directives/keys/{universe}.key
-            
-            ⚠️ Secure your swarm key:
-                chmod 600 /matrix/boot_directives/keys/{universe}.key
-            
-            To deploy from command line, use:
-
-                matrixd boot --universe {universe}
-
-            Matrix will automatically resolve the encrypted directive and swarm key.
-            """
-            DeploymentDialog(deploy_cmd, self).exec()
+            else:
+                # step 11. Show final deploy command to operator
+                deploy_cmd = f"""
+                🚀 Your directive has been encrypted and saved.
+    
+                Directive: {out_path}
+                Swarm Key: /matrix/boot_directives/keys/{universe}.key
+                
+                ⚠️ Secure your swarm key:
+                    chmod 600 /matrix/boot_directives/keys/{universe}.key
+                
+                To deploy from command line, use:
+    
+                    matrixd boot --universe {universe}
+    
+                Matrix will automatically resolve the encrypted directive and swarm key.
+                """
+                DeploymentDialog(deploy_cmd, self).exec()
 
         except Exception as e:
             print(f"Failed directive creation: {e}")

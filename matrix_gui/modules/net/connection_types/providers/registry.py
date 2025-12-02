@@ -7,6 +7,7 @@ from .telegram_provider import TelegramConnectionProvider
 from .openai_provider import OpenAIConnectionProvider
 from .slack_provider import SlackConnectionProvider
 from .ssh_provider import SSHConnectionProvider
+from .mysql_provider import MySQLConnectionProvider
 
 CONNECTION_PROVIDER_REGISTRY = {
     "https": HTTPSConnectionProvider(),
@@ -17,4 +18,5 @@ CONNECTION_PROVIDER_REGISTRY = {
     "openai": OpenAIConnectionProvider(),
     "slack": SlackConnectionProvider(),
     "ssh": SSHConnectionProvider(),
+    "mysql": MySQLConnectionProvider(),
 }

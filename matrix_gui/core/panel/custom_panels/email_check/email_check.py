@@ -618,10 +618,8 @@ class EmailCheck(PhoenixPanelInterface):
         pass
 
     def _on_close(self):
-        if self._signals_connected:
-            try:
-                if not self._signals_connected:
-                    return
+        try:
+            if self._signals_connected:
                 self._signals_connected = False
 
                 scoped = f"inbound.verified.check_mail.cmd_list_mailbox"
@@ -631,5 +629,5 @@ class EmailCheck(PhoenixPanelInterface):
                 scoped = f"inbound.verified.check_mail.load_email_accounts"
                 self.bus.off(scoped, self._handle_load_email_accounts)
 
-            except Exception as e:
-                emit_gui_exception_log("EmailCheck._disconnect_signals", e)
+        except Exception as e:
+            emit_gui_exception_log("EmailCheck._disconnect_signals", e)
