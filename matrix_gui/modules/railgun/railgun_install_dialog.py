@@ -1,6 +1,5 @@
 # Authored by Daniel F MacDonald and ChatGPT-5.1 aka The Generals
 # Commander Edition — Railgun MatrixOS Installer (Operational Core)
-
 import os
 import io
 import time
@@ -11,11 +10,19 @@ from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QComboBox, QFileDialog, QTextEdit, QLineEdit, QGroupBox
 )
+from matrix_gui.modules.vault.services.vault_core_singleton import VaultCoreSingleton
 
 class RailgunInstallDialog(QDialog):
-    def __init__(self, vault_data, parent=None):
+    def __init__(self, parent=None):
         super().__init__(parent)
-        self.vault_data = vault_data or {}
+        self.ssh_map = {}
+        self.install_modes = [
+            "Install from GitHub",
+            "Local Full Install"
+        ]
+        self.tail_thread = None
+        self._build_ui()
+        self._extract_ssh_targets()
         self.ssh_map = {}
         self.install_modes = [
             "Install from GitHub",
@@ -88,6 +95,10 @@ class RailgunInstallDialog(QDialog):
 
         self.output_box.append("[Railgun] Installer UI ready.")
 
+    def _vault(self):
+        """Fetch the live vault snapshot."""
+        return VaultCoreSingleton.get().read()
+
     def _browse_local(self):
         folder = QFileDialog.getExistingDirectory(self, "Select MatrixOS Root Folder")
         if folder:
@@ -95,18 +106,22 @@ class RailgunInstallDialog(QDialog):
 
     def _extract_ssh_targets(self):
         self.ssh_selector.clear()
-        ssh_mgr = (self.vault_data.get("connection_manager") or {}).get("ssh", {})
+        vault = self._vault()
+        ssh_mgr = vault.get("connection_manager", {}).get("ssh", {})
         self.ssh_map = {}
+
         if not ssh_mgr:
             self.ssh_selector.addItem("No SSH profiles in vault")
             self.output_box.append("[Railgun] No SSH profiles found in vault.")
             return
+
         for sid, meta in ssh_mgr.items():
             label = meta.get("label", sid)
             host = meta.get("host")
             user = meta.get("username", "root")
             port = int(meta.get("port", 22))
             key = meta.get("private_key", "")
+
             self.ssh_selector.addItem(f"{label} ({host})", sid)
             self.ssh_map[sid] = {
                 "host": host,
@@ -114,6 +129,7 @@ class RailgunInstallDialog(QDialog):
                 "port": port,
                 "private_key": key,
             }
+
         self.output_box.append(f"[Railgun] Loaded {len(self.ssh_map)} SSH profiles.")
 
     def _get_selected_ssh(self):
@@ -124,6 +140,7 @@ class RailgunInstallDialog(QDialog):
 
     def run_installer(self):
         try:
+            self._extract_ssh_targets()  # always refresh SSH targets
             self.output_box.append("[Railgun] Starting installation…")
             ssh_cfg = self._get_selected_ssh()
             if not ssh_cfg:

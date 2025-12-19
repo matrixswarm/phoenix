@@ -1,6 +1,6 @@
 from .base_provider import ConnectionProviderInterface
 
-class OpenAIConnectionProvider(ConnectionProviderInterface):
+class OpenAI(ConnectionProviderInterface):
 
     def get_columns(self):
         return ["Label", "API Key", "Default Channel", "Serial"]

@@ -1,5 +1,31 @@
 from matrix_gui.core.event_bus import EventBus
 from matrix_gui.modules.vault.crypto.vault_handler import save_vault_singlefile
+from PyQt6.QtWidgets import QMessageBox
+import threading
+
+def run_with_timeout(func, timeout, *args, **kwargs):
+    """
+    Run a function with a timeout.
+    Returns (result, error). If timeout occurs, error is TimeoutError.
+    """
+    result = {"value": None, "error": None}
+
+    def target():
+        try:
+            result["value"] = func(*args, **kwargs)
+        except Exception as e:
+            result["error"] = e
+
+    t = threading.Thread(target=target)
+    t.start()
+    t.join(timeout)
+
+    if t.is_alive():
+        return None, TimeoutError("Vault save timed out")
+    if result["error"]:
+        return None, result["error"]
+    return result["value"], None
+
 
 class VaultEncryptionService:
     service_id = "EncryptionService"
@@ -37,19 +63,47 @@ def handle_vault_update(event_data):
         print(f"[VAULT ERROR] Failed to save vault: {e}")
 
 def _on_vault_update(**kw):
-    path = kw.get("vault_path")
-    password = kw.get("password")
-    data = kw.get("data")
-    if not (path and isinstance(data, dict)):
-        print("[VAULT][ERROR] bad args to vault.update:", {"path": path, "data?": isinstance(data, dict)})
-        EventBus.emit("vault.save_error", error="bad args")
-        return
-
     try:
-        from matrix_gui.modules.vault.crypto.vault_handler import save_vault_singlefile
-        save_vault_singlefile(data, password, path)
+        path = kw.get("vault_path")
+        password = kw.get("password")
+        data = kw.get("data")
+
+        if not (path and isinstance(data, dict)):
+            print("[VAULT][ERROR] bad args to vault.update:", {"path": path, "data?": isinstance(data, dict)})
+            EventBus.emit("vault.save_error", error="bad args")
+            return
+
+        print(f"[VAULT] 💾 Attempting vault save → {path}")
+
+        # ---- TIMEOUT CALL HERE ----
+        _, error = run_with_timeout(
+            save_vault_singlefile,
+            timeout=5,
+            data=data,
+            password=password,
+            data_path=path
+        )
+
+        if error:
+            print(f"[VAULT][ERROR] SAVE TIMEOUT: {error}")
+
+            try:
+                QMessageBox.critical(
+                    None,
+                    "Vault Save Failed",
+                    f"The vault could not be saved due to timeout.\n\n"
+                    f"Path:\n{path}\n\n"
+                    f"Your previous vault backup is still safe."
+                )
+            except Exception as popup_err:
+                print(f"[VAULT][WARN] Could not show popup: {popup_err}")
+
+            EventBus.emit("vault.save_error", error=str(error))
+            return
+
         print(f"[VAULT] saved → {path}")
         EventBus.emit("vault.saved", vault_path=path)
+
     except Exception as e:
         print("[VAULT][ERROR] save failed:", e)
         EventBus.emit("vault.save_error", error=str(e))

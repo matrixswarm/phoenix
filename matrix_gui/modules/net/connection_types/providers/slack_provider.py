@@ -1,6 +1,6 @@
 from .base_provider import ConnectionProviderInterface
 
-class SlackConnectionProvider(ConnectionProviderInterface):
+class Slack(ConnectionProviderInterface):
 
     def get_columns(self):
         return ["Label", "Webhook URL", "Default Channel", "Serial"]

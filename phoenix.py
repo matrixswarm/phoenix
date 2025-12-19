@@ -29,26 +29,24 @@ except Exception as e:
     print("PyQt import error:", e)
 import os, sys, multiprocessing
 from PyQt6.QtGui import QWindow
-from PyQt6.QtWidgets import QVBoxLayout, QMainWindow, QApplication,QGraphicsDropShadowEffect, QMessageBox, QStackedWidget, QTabBar, QStatusBar, QLabel, QDialog, QTabWidget
-from matrix_gui.core.session_window import run_session
+from PyQt6.QtWidgets import QVBoxLayout, QMainWindow,  QWidget, QHBoxLayout, QPushButton, QApplication,QGraphicsDropShadowEffect, QMessageBox, QStackedWidget, QTabBar, QStatusBar, QLabel, QDialog, QTabWidget
 from PyQt6.QtCore import QTimer, Qt, QPropertyAnimation, QEasingCurve
 from PyQt6.QtGui import QColor, QIcon
+from matrix_gui.core.session_window import run_session
+
 import matrix_gui.config.boot.boot #don't take this out, looks like it's not doing anything but it setups event listeners
-from matrix_gui.modules.vault.crypto.vault_handler import load_vault_singlefile
-from matrix_gui.modules.vault.services.vault_singleton import VaultSingleton
-from matrix_gui.modules.vault.services.vault_obj import VaultObj
 from matrix_gui.core.emit_gui_exception_log import emit_gui_exception_log
 from matrix_gui.core.event_bus import SessionRegistry
 from matrix_gui.core.splash import PhoenixSplash
 from matrix_gui.modules.vault.ui.vault_popup import VaultPasswordDialog
-from matrix_gui.modules.vault.ui.vault_init_dialog import VaultInitDialog
-from PyQt6.QtWidgets import QWidget, QHBoxLayout, QPushButton
+
 from matrix_gui.core.event_bus import EventBus
 from matrix_gui.core.phoenix_control_panel import PhoenixControlPanel
 from matrix_gui.util.resolve_matrixswarm_base import resolve_matrixswarm_base
 from matrix_gui.core.panel.home.phoenix_static_panel import PhoenixStaticPanel
 from matrix_gui.config.boot.globals import get_sessions
 from matrix_gui.core.utils.ui_toast import show_toast
+from matrix_gui.modules.vault.services.vault_core_singleton import VaultCoreSingleton
 
 # Define the debug function
 #Flip DEBUG_VISUAL to True only when you want it inside your GUI console.
@@ -80,9 +78,6 @@ class PhoenixCockpit(QMainWindow):
         self.setWindowTitle("MatrixSwarm :: PHOENIX COCKPIT")
         self.setGeometry(100, 100, 1200, 800)
         self.setMinimumSize(1000, 600)
-        self.vault_loaded = False
-        self.vault_path = None
-        self.vault_password = None
 
         self.sessions = None
 
@@ -204,9 +199,6 @@ class PhoenixCockpit(QMainWindow):
         self.anim.setLoopCount(-1)
         self.anim.start()
 
-        self.vault_data = None
-        self.vault_password = None
-        self.vault_path = None
         self.sessions = None
         self.dispatcher = None
 
@@ -222,7 +214,7 @@ class PhoenixCockpit(QMainWindow):
         self.session_processes = []
 
         EventBus.on("vault.closed", self._destroy_all_sessions)
-        EventBus.on("vault.update", self._on_vault_update)
+        #EventBus.on("vault.update", self._on_vault_update)
         EventBus.on("session.open.requested", self.launch_session)
         EventBus.on("vault.unlocked", self._on_vault_unlocked_ui_flip)
         EventBus.on("vault.reopen.requested", self._on_vault_reopen_requested)
@@ -408,6 +400,61 @@ class PhoenixCockpit(QMainWindow):
                 if self.static_panel:
                     self.static_panel.handle_feed_event(event)
 
+
+            elif mtype == "vault.query":
+
+                dep_id = msg.get("dep_id")
+
+                target = msg.get("target", "deployment")
+
+                if not dep_id:
+                    print("[VAULT][WARN] vault.query missing dep_id")
+
+                    return
+
+                try:
+
+                    vcs = VaultCoreSingleton.get()
+                    vault_snapshot = vcs.read()  # full top-level vault data snapshot
+                    # Default: backward-compatible deployment access
+                    if target == "deployment":
+                        dep_store = vcs.get_store("deployments")
+                        data = dep_store.get_dep(dep_id)
+                    # New: full registry map
+                    elif target == "registry":
+                        # some VaultCores expose .data, others use .read() or a namespace map helper
+                        reg_store = vcs.get_store("registry")
+                        if hasattr(reg_store, "get_namespace_map"):
+                            data = reg_store.get_namespace_map()
+                        elif hasattr(reg_store, "data"):
+                            data = reg_store.data
+                        else:
+                            data = vault_snapshot.get("registry", {})
+                    # Allow optional full vault read
+                    elif target == "vault":
+                        data = vault_snapshot
+
+                    # Any other top-level section (workspaces, connection_manager, etc.)
+                    elif target in vault_snapshot:
+                        data = vault_snapshot.get(target, {})
+                    else:
+                        print(f"[VAULT][WARN] Unknown target for vault.query: {target}")
+                        data = {}
+
+                    # Send back to the session process
+                    resp = {
+                        "type": "vault.response",
+                        "dep_id": dep_id,
+                        "target": target,
+                        "data": data,
+                    }
+                    conn.send(resp)
+                    print(f"[VAULT] 📤 Sent vault.response target='{target}' for {dep_id}")
+                except Exception as e:
+                    print(f"[VAULT][ERROR] vault.query failed: {e}")
+
+
+
             elif mtype == "vault.update.requested":
 
                 dep_id = msg.get("dep_id")
@@ -417,69 +464,13 @@ class PhoenixCockpit(QMainWindow):
                     print(f"[VAULT][WARN] vault.update.requested missing dep_id")
                     return
 
-                dep = self.vault_data["deployments"].setdefault(dep_id, {})
-                for k, v in patch.items():
-                    if isinstance(dep.get(k), dict) and isinstance(v, dict):
-                        dep[k].update(v)
-                    else:
-                        dep[k] = v
-                self._handle_vault_save(self.vault_data)
-                print(f"[VAULT] ✅ Applied patch for {dep_id}: {list(patch.keys())}")
-
-
-            elif mtype == "vault.query":
-
-                dep_id = msg.get("dep_id")
-                target = msg.get("target", "deployment")  # fallback handled safely here too
-
-                if not dep_id:
-                    print(f"[VAULT][WARN] vault.query missing dep_id: {msg}")
-                    return
-
-                # Select target branch dynamically
-                data = {}
-                try:
-
-                    if target == "deployment":
-                        data = (self.vault_data or {}).get("deployments", {}).get(dep_id, {})
-                    elif target == "connection_manager":
-                        data = (self.vault_data or {}).get("connection_manager", {})
-                    elif target == "vault":
-                        data = self.vault_data or {}
-                    else:
-                        print(f"[VAULT][WARN] Unknown vault.query target '{target}' — returning empty data.")
-                    resp = {
-                        "type": "vault.response",
-                        "dep_id": dep_id,
-                        "target": target,
-                        "data": data
-                    }
-                    conn.send(resp)
-                    print(f"[VAULT] 📤 Sent '{target}' snapshot for {dep_id} to session.")
-                except Exception as e:
-                    print(f"[VAULT][ERROR] Failed to build vault.response for {target}: {e}")
-                    try:
-                        conn.send({
-                            "type": "vault.response",
-                            "dep_id": dep_id,
-                            "target": target,
-                            "data": {},
-                            "error": str(e)
-                        })
-
-                    except Exception:
-                        pass
-
-            elif mtype == "telemetry":
-                status = msg.get("status")
-                if status in ("connected", "ready", "active"):
-                    self._active_sessions.add(sid)
-                elif status in ("exit", "disconnected", "error"):
-                    self._active_sessions.discard(sid)
-
-
-                # always sync sessions label
-                self.status_sessions.setText(f"Sessions: {len(self._active_sessions)}")
+                vcs = VaultCoreSingleton.get()
+                dep_store = vcs.get_store("deployments")
+                success = dep_store.update_dep(dep_id, patch)
+                if success:
+                    print(f"[VAULT] ✅ Deployment '{dep_id}' patched with keys: {list(patch.keys())}")
+                else:
+                    print(f"[VAULT] ❌ Patch rejected for '{dep_id}' — validation failed.")
 
             elif mtype == "heartbeat":
                 for sess in self.session_processes:
@@ -525,30 +516,6 @@ class PhoenixCockpit(QMainWindow):
                 except Exception as e:
                     print(f"[MIRV][ERROR] Failed to execute cmd={action}: {e}")
 
-
-            elif mtype == "vault_update_request":
-
-                dep = msg.get("deployment")
-                dep_id = msg.get("deployment_id")
-
-                if not dep or not dep_id:
-                    print(f"[VAULT][WARN] vault_update_request missing fields: {msg}")
-                    return
-
-                # Replace the whole deployment, not shallow merge
-                self.vault_data["deployments"][dep_id] = dep
-                print(f"[VAULT] ✅ Deployment {dep_id} updated (favorites: {dep.get('terminal_favorites')})")
-                self._handle_vault_save(self.vault_data)
-                for sess in self.session_processes:
-                    try:
-                        sess["conn"].send({
-                            "type": "deployment_updated",
-                            "deployment_id": dep_id,
-                            "deployment": dep,
-                        })
-                    except Exception as e:
-                        print(f"[VAULT][WARN] Failed to broadcast: {e}")
-
             elif mtype == "ui_toast":
 
                 message = msg.get("message", "Action completed.")
@@ -592,11 +559,9 @@ class PhoenixCockpit(QMainWindow):
                     self.status_sessions.setText(f"Sessions: {len(self._active_sessions)}")
                     print(f"[MIRV] Session {sid} fully cleaned up")
 
-
                 except Exception as e:
 
                     emit_gui_exception_log("PhoenixCockpit._handle_session_msg.exit_cleanup", e)
-
 
             else:
                 print(f"[MIRV] Unknown msg {msg}")
@@ -607,45 +572,44 @@ class PhoenixCockpit(QMainWindow):
     def _on_vault_unlocked_ui_flip(self, **kwargs):
 
         try:
-            # stash vault for later
-            self.vault_data = kwargs.get("vault_data")
-            self.vault_password = kwargs.get("password")
-            self.vault_path = kwargs.get("vault_path")
 
-            #unlock button
-            self.stack.setCurrentIndex(1)
+            if not kwargs.get("vault_data") or not kwargs["vault_data"].get("deployments"):
+                QMessageBox.warning(self, "Select a Vault", "You must select or create a vault before continuing.")
+                return
 
-
-            self.fade = QPropertyAnimation(self.unlocked_screen, b"windowOpacity")
-            self.fade.setStartValue(0.0)
-            self.fade.setEndValue(1.0)
-            self.fade.setDuration(400)
-            self.fade.setEasingCurve(QEasingCurve.Type.InOutQuad)
-            self.fade.start()
-
-            # hand vault to the panel (it also listens to vault.unlocked and will start sessions/dispatcher itself)
-            self.control_panel.vault_data = self.vault_data
-            self.control_panel.vault_path = self.vault_path
-            self.control_panel.password = self.vault_password
-            self.control_panel.deployments = getattr(self, "deployments", {})
-            self.control_panel.connection_groups = getattr(self, "connection_groups", {})
-            self.control_panel.directives = getattr(self, "directives", {})
+            try:
+                #unlock button
+                self.stack.setCurrentIndex(1)
 
 
-            #static panel
-            self.static_panel.vault_data = self.vault_data
-            self.static_panel.vault_path = self.vault_path
-            self.static_panel._refresh_deployment_summary()
-            self.static_panel.setVisible(True)
+                self.fade = QPropertyAnimation(self.unlocked_screen, b"windowOpacity")
+                self.fade.setStartValue(0.0)
+                self.fade.setEndValue(1.0)
+                self.fade.setDuration(400)
+                self.fade.setEasingCurve(QEasingCurve.Type.InOutQuad)
+                self.fade.start()
 
-            self.unlock_button.hide()
-            self.control_panel.setVisible(True)
-            self.control_panel.setEnabled(True)
+                self.control_panel.deployments = getattr(self, "deployments", {})
+                self.control_panel.connection_groups = getattr(self, "connection_groups", {})
+                self.control_panel.directives = getattr(self, "directives", {})
 
-            dep_count = len((self.vault_data or {}).get("deployments", {}))
+                #static panel
+                self.static_panel.setVisible(True)
+
+                self.unlock_button.hide()
+                self.control_panel.setVisible(True)
+                self.control_panel.setEnabled(True)
+            except Exception as e:
+                emit_gui_exception_log("PhoenixControlPanel.launch", e)
+
+            vcs = VaultCoreSingleton.get()
+            deployments = vcs.read().get("deployments", {})
+            dep_count = len(deployments)
             self.status_vault.setText("Vault: 🔓")
             self.status_deployments.setText(f"Deployments: {dep_count}")
             self.status_sessions.setText("Sessions: 0")  # reset at unlock
+
+            print("[VAULT-CORE] Initialized central vault authority.")
 
         except Exception as e:
             emit_gui_exception_log("PhoenixControlPanel.launch", e)
@@ -676,38 +640,6 @@ class PhoenixCockpit(QMainWindow):
 
         except Exception as e:
             emit_gui_exception_log("PhoenixCockpit.closeEvent", e)
-
-    def _handle_vault_save(self, vault_data):
-        try:
-            EventBus.emit("vault.update", data=vault_data,
-                          password=self.vault_password,
-                          vault_path=self.vault_path)
-            print("[PHOENIX][_handle_vault_save] Vault saved via bus.")
-
-        except Exception as e:
-            QMessageBox.critical(self, "Save Failed", f"Vault save failed:\n{e}")
-
-    def _on_vault_update(self, **kwargs):
-
-        try:
-            new_data = kwargs.get("data", self.vault_data) or {}
-            self.vault_data = self.vault_data or {}
-            self.vault_data.setdefault("deployments", {})
-
-            for dep_id, dep_val in list(new_data.get("deployments", {}).items()):
-                if dep_id not in self.vault_data["deployments"]:
-                    print(f"[VAULT][WARN] Attempted update for missing deployment {dep_id}, ignoring.")
-                    continue
-                if not isinstance(dep_val, dict):
-                    print(f"[VAULT] 🚮 Purged corrupt deployment {dep_id}")
-                    continue
-                self.vault_data["deployments"][dep_id] = dep_val
-
-            dep_count = len(self.vault_data.get("deployments", {}))
-            self.status_deployments.setText(f"Deployments: {dep_count}")
-        except Exception as e:
-            emit_gui_exception_log("PhoenixCockpit._on_vault_update", e)
-
 
     def _handle_vault_reload(self):
         EventBus.emit("vault.reopen.requested", save=False)
@@ -772,16 +704,6 @@ class PhoenixCockpit(QMainWindow):
         except Exception as e:
             print(f"[UI] Failed to hide elements: {e}")
 
-        # Notify and clear state
-        old_path = getattr(self, "vault_path", None)
-        EventBus.emit("vault.closed", vault_path=old_path)
-        VaultSingleton.clear()
-
-        # Reset state
-        self.vault_loaded = False
-        self.vault_data = None
-        self.vault_password = None
-        self.vault_path = None
 
         # Restore locked screen
         self.stack.setCurrentIndex(0)
@@ -798,11 +720,6 @@ class PhoenixCockpit(QMainWindow):
         # Relaunch unlock flow (optional: prompt user immediately)
         self.unlock_vault()
 
-        #6) Update status bar
-        self.status_vault.setText("Vault: 🔒")
-        self.status_deployments.setText("Deployments: 0")
-        self.status_sessions.setText("Sessions: 0")
-
     def unlock_vault(self):
         """
         Lean vault open/create coordinator.
@@ -812,41 +729,6 @@ class PhoenixCockpit(QMainWindow):
         """
         # First-run: no vault directory contents → create one
         try:
-            if not os.listdir(self.default_vault_dir):
-                init_dialog = VaultInitDialog(self)
-                if init_dialog.exec() != init_dialog.Accepted:
-                    return  # user cancelled
-
-                self.vault_path = init_dialog.vault_path
-                self.vault_password = init_dialog.vault_password
-
-                # Initialize once, set singleton, emit unlocked (keep payload for compatibility)
-                try:
-                    data = load_vault_singlefile(self.vault_password, self.vault_path)
-                    try:
-                        # If you have a concrete VaultObj, set it; else you can
-                        # adapt this to your VaultSingleton API.
-                        vobj = VaultObj(
-                            path=self.vault_path,
-                            vault=data,
-                            password=self.vault_password,
-                            encryptor=None,
-                            decryptor=None,
-                        )
-                        VaultSingleton.set(vobj)
-                    except Exception:
-                        # Fallback: at least clear/set a minimal state if your singleton API differs
-                        pass
-
-                    EventBus.emit(
-                        "vault.unlocked",
-                        vault_data=data,
-                        password=self.vault_password,
-                        vault_path=self.vault_path
-                    )
-                except Exception as e:
-                    QMessageBox.critical(self, "Vault Error", f"Failed to initialize vault:\n{str(e)}")
-                return
 
             # Normal path: unlock dialog handles decrypt + singleton + event
             dialog = VaultPasswordDialog(self)

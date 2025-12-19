@@ -1,6 +1,6 @@
 from .base_provider import ConnectionProviderInterface
 
-class TelegramConnectionProvider(ConnectionProviderInterface):
+class Telegram(ConnectionProviderInterface):
 
     def get_columns(self):
         return ["Label", "Chat ID", "Token", "Default Channel", "Serial"]

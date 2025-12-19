@@ -1,0 +1,32 @@
+{
+    "name": "ghost_wire",
+    "universal_id": "invisible-man",
+    "constraints": [],
+    "config": {
+        "ui": {
+            "agent_tree": {
+                "emoji": "\ud83d\udc7b\ufe0f"
+            }
+        },
+        "tick_rate": 5,
+        "watch_paths": [
+            "/etc/passwd",
+            "/etc/shadow",
+            "/root/.ssh",
+            "/var/www",
+            "/home"
+        ],
+        "command_patterns": [
+            "rm -rf",
+            "scp",
+            "curl",
+            "wget",
+            "nano /etc",
+            "vi /etc",
+            "vim /etc",
+            "sudo",
+            "su",
+            "chmod 777"
+        ]
+    }
+}

@@ -68,6 +68,21 @@ CERT_INJECTION_MAP = {
             ]
 
         },
+
+        "cdn": {
+            "target": ["config", "cdn"],
+            "fields": [
+                "host",
+                "port",
+                "username",
+                "auth_type",
+                "remote_path",
+                "serial",
+                "password",
+                "private_key",
+                "public_key"
+            ]
+        },
         "mysql": {
                 "target": ["config", "mysql"],
                 "fields": [

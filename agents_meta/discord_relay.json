@@ -1,0 +1,30 @@
+{
+    "name": "discord_relay",
+    "universal_id": "discord-delta-5",
+    "constraints": [
+        {
+            "discord": null
+        }
+    ],
+    "config": {
+        "ui": {
+            "agent_tree": {
+                "emoji": "\ud83d\udcac"
+            },
+            "panel": [
+                "discord_relay.security_2fa"
+            ]
+        },
+        "service-manager": [
+            {
+                "role": [
+                    "hive.alert@cmd_send_alert_msg"
+                ],
+                "scope": [
+                    "parent",
+                    "any"
+                ]
+            }
+        ]
+    }
+}

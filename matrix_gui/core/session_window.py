@@ -161,6 +161,7 @@ class SessionWindow(QMainWindow):
         super().__init__()
         try:
 
+
             self.deployment_id=deployment_id
             self.deployment = deployment
             self._hb_timer = QTimer(self)
@@ -841,8 +842,6 @@ class SessionWindow(QMainWindow):
                         "type": "exit",
                         "session_id": self.cockpit_id
                     })
-
-                    self.scraper_conn.send({"type": "exit"})
 
                 except (BrokenPipeError, OSError):
                     print("[SESSION][EXIT] Pipe already closed – skipping exit signal.")

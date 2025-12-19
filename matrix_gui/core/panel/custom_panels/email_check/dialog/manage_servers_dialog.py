@@ -337,28 +337,27 @@ class ManageServersDialog(QDialog):
     def _load_vault_email_accouns(self):
         """List available incoming email connections from the vault directly."""
         try:
+
             vault = VaultConnectionSingleton.get()
-            vault_data = vault.fetch_fresh(target="connection_manager")
-            email_section = vault_data.get("email", {})
+            # Fetch registry data from cockpit over pipe
+            vault_data = vault.fetch_fresh(target="registry") or {}
+            email_conns = vault_data.get("imap", {})
 
             #d(email_section)
             self.vault_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
             self.vault_table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
 
-            if not email_section:
+            if not email_conns:
                 print("[MANAGE-SERVERS] ⚠ No email section found in vault_data:", vault_data.keys())
                 return
 
-            print(f"[MANAGE-SERVERS] Loaded {len(email_section)} email connection(s) from vault.")
-            rows = [cfg for cfg in email_section.values() if
-                    cfg.get("proto") == "email" and cfg.get("type") == "incoming"]
+            print(f"[MANAGE-SERVERS] Loaded {len(email_conns)} email connection(s) from vault.")
+            rows = email_conns.values()
 
             self.vault_table.setRowCount(len(rows))
             for i, cfg in enumerate(rows):
 
                 if not isinstance(cfg, dict):
-                    continue
-                if cfg.get("proto") != "email" or cfg.get("type") != "incoming":
                     continue
 
                 self.vault_table.insertRow(i)

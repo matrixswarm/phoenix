@@ -18,6 +18,8 @@ class InboundDispatcher:
             ctx = get_sessions().get(session_id)
             deployment = ctx.group.get("deployment", {}) if ctx else {}
 
+            print("handling inbound message")
+
             # === 1. Serial / Author Signature Verification ===
             serial = payload.get("serial")
             if not serial:

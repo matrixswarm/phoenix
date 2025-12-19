@@ -159,18 +159,20 @@ matrix_directive = {
                 "ui": {
                     "agent_tree": {"emoji": "📈"},
                     "panel": [
-                        "trend_scout.trend_ingest"
+                        "trend_scout.trend_scout"
                     ],
                 },
-                "service-manager": [{
+                                "service-manager": [{
                     "role": [
                         "hive.trend_scout.push_local@cmd_push_local",
                         "hive.trend_scout.update_config@cmd_update_config",
                         "hive.trend_scout.status@cmd_status"
                     ],
                     "scope": ["parent", "any"]
-                }]
-
+                }],
+                "rpc_router_role": "hive.oracle",
+                "gen_embeddings_role": "hive.oracle.gen_embeddings",
+                "cluster_labeler_role": "hive.oracle.cluster_labeler"
             }
         },
         {
@@ -819,8 +821,11 @@ matrix_directive = {
                     "panel": ["oracle.oracle_config_panel"]
                 },
                 "service-manager": [{
-                    "role": ["hive.oracle@cmd_msg_prompt", "external.gateway.config@cmd_external_gateway_config"],
-                }]
+                    "role": ["hive.oracle@cmd_msg_prompt",
+                             "hive.oracle.gen_embeddings@cmd_generate_embeddings",
+                             "external.gateway.config@cmd_external_gateway_config"
+                             ],
+                }],
             }
 
         },

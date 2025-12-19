@@ -22,8 +22,8 @@ from PyQt6.QtWidgets import (
 from matrix_gui.core.emit_gui_exception_log import emit_gui_exception_log
 
 class DeployOptionsDialog(QDialog):
-    def __init__(self, ssh_map:dict, label:str):
-        super().__init__()
+    def __init__(self, ssh_map:dict, label:str, parent=None):
+        super().__init__(parent)
 
         try:
             self.setWindowTitle("Directive Deployment Options")

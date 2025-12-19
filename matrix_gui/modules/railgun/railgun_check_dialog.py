@@ -7,6 +7,8 @@ from PyQt6.QtWidgets import (
     QLabel, QPushButton, QComboBox, QTextEdit, QMessageBox
 )
 from matrix_gui.core.emit_gui_exception_log import emit_gui_exception_log
+from matrix_gui.modules.vault.services.vault_core_singleton import VaultCoreSingleton
+
 class RailgunCheckDialog(QDialog):
     """
     Remote system reconnaissance for MatrixOS deployment.
@@ -21,9 +23,8 @@ class RailgunCheckDialog(QDialog):
         - Existing MatrixOS installation
     """
 
-    def __init__(self, vault_data, parent=None):
+    def __init__(self, parent=None):
         super().__init__(parent)
-        self.vault_data = vault_data or {}
 
         self.setWindowTitle("⚡ Railgun — Check Remote Host")
         self.resize(720, 520)
@@ -37,7 +38,10 @@ class RailgunCheckDialog(QDialog):
         ssh_box.addWidget(QLabel("<b>SSH Target:</b>"))
 
         self.ssh_selector = QComboBox()
-        ssh_map = (self.vault_data.get("connection_manager") or {}).get("ssh", {})
+        vault = self._vault()
+
+        ssh_map = vault.get("connection_manager", {}).get("ssh", {})
+
         for sid, meta in ssh_map.items():
             label = meta.get("label", sid)
             self.ssh_selector.addItem(f"{label} ({meta.get('host')})", meta)
@@ -100,6 +104,19 @@ class RailgunCheckDialog(QDialog):
     # -----------------------------------------------------
     # SSH INIT
     # -----------------------------------------------------
+    def _vault(self):
+        """Always fetch the live vault snapshot."""
+        return VaultCoreSingleton.get().read()
+
+    def refresh_targets(self):
+        self.ssh_selector.clear()
+        vault = self._vault()
+        ssh_map = vault.get("connection_manager", {}).get("ssh", {})
+
+        for sid, meta in ssh_map.items():
+            label = meta.get("label", sid)
+            self.ssh_selector.addItem(f"{label} ({meta.get('host')})", meta)
+
     def _connect(self):
         ssh_cfg = self.ssh_selector.currentData()
         if not ssh_cfg:
@@ -223,6 +240,7 @@ class RailgunCheckDialog(QDialog):
     # RUN ALL
     # -----------------------------------------------------
     def _run_all(self):
+        self.refresh_targets()
         self.output_box.append("\n⚡ <b>Running Full Recon...</b>\n")
         self.check_ssh()
         self.check_os()

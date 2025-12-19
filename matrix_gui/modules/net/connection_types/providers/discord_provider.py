@@ -1,22 +1,20 @@
 from .base_provider import ConnectionProviderInterface
 
-class DiscordConnectionProvider(ConnectionProviderInterface):
+class Discord(ConnectionProviderInterface):
 
     def get_columns(self):
-        return ["Label", "Channel ID", "Token", "Default Channel", "Serial"]
+        return ["Label", "Channel ID", "Bot Token", "Default Channel", "Serial"]
 
     def get_default_channel_options(self):
-        return ["alerts"]
+        return ["alerts", "outgoing.command"]
 
     def get_row(self, data, used_in):
-        token_preview = (data.get("bot_token","")[:6] + "…") if data.get("bot_token") else ""
-        return [
-            data.get("label",""),
-            data.get("channel_id",""),
-            token_preview,
-            data.get("default_channel",""),
-            data.get("serial",""),
-        ]
+        label = data.get("label", "")
+        channel = data.get("channel_id", "")
+        bot_token = self.mask_sensitive(data.get("bot_token", ""))
+        def_chan = data.get("default_channel", "")
+        serial = data.get("serial", "")[:8] + "..."
+        return [label, channel, bot_token, def_chan, serial]
 
     def get_conn_id(self, cid, data):
         return cid

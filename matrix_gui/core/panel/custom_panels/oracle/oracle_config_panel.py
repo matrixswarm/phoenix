@@ -1,7 +1,7 @@
 # Authored by Daniel F MacDonald and ChatGPT-5 aka The Generals
 import uuid, time
 from PyQt6.QtWidgets import (
-    QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QComboBox, QTextEdit, QMessageBox, QWidget
+    QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QComboBox, QTextEdit, QMessageBox
 )
 from matrix_gui.core.class_lib.packet_delivery.packet.standard.command.packet import Packet
 from matrix_gui.core.panel.custom_panels.interfaces.base_panel_interface import PhoenixPanelInterface
@@ -57,6 +57,14 @@ class OracleConfigPanel(PhoenixPanelInterface):
         test_btn.clicked.connect(self._send_test_prompt)
         layout.addWidget(test_btn)
 
+        # --- Debug Toggle ---
+        dbg_row = QHBoxLayout()
+        dbg_row.addWidget(QLabel("Dump Incoming Prompts:"))
+        self.dump_combo = QComboBox()
+        self.dump_combo.addItems(["false", "true"])
+        dbg_row.addWidget(self.dump_combo)
+        layout.addLayout(dbg_row)
+
         # --- Save Buttons ---
         btn_row = QHBoxLayout()
         save_btn = QPushButton("💾 Save Config")
@@ -85,7 +93,9 @@ class OracleConfigPanel(PhoenixPanelInterface):
             response_mode = self.response_combo.currentText()
 
 
-            new_cfg={}
+            new_cfg={"push_live_config": 1}
+            dump_flag = self.dump_combo.currentText().strip().lower() == "true"
+            new_cfg["dump_incoming_prompts"] = dump_flag
 
             if model:
                 new_cfg["model"] = model
@@ -101,8 +111,7 @@ class OracleConfigPanel(PhoenixPanelInterface):
                 "handler": "cmd_update_agent",
                 "content": {
                     "target_universal_id": self.node.get("universal_id", "oracle"),
-                    "config": new_cfg,
-                    "push_live_config": 1
+                    "config": new_cfg
                 },
                 "ts": time.time()
             })
@@ -175,6 +184,7 @@ class OracleConfigPanel(PhoenixPanelInterface):
 
         except Exception as e:
             emit_gui_exception_log("OracleConfigPanel._send_test_prompt", e)
+
 
     def _connect_signals(self):
 

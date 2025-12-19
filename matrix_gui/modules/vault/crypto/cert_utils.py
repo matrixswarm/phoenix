@@ -138,12 +138,12 @@ def embed_agent_sources(directive, base_path=None):
         }
     """
 
-    if not directive:
-        return
+    if not directive or not isinstance(directive, dict):
+        print(f"{directive}")
+        return False
 
     print(f"[CLOWN-CAR][TRACE] scanning node: {directive.get('name')}")
 
-    # If this node is a dict, treat as an agent
     if isinstance(directive, dict):
 
         print(f"[CLOWN-CAR][TRACE] STARTING")
@@ -152,86 +152,78 @@ def embed_agent_sources(directive, base_path=None):
         src_path = directive.get("src")
         lang_hint = directive.get("lang", "python")
 
-        # Resolve path if missing
         if not src_path and agent_name and base_path:
             found = resolve_agent_source(agent_name, base_path, lang_hint)
             if found:
                 directive["src"] = found
                 src_path = found
+            else:
+                print(f"[CLOWN-CAR][ERROR] Missing source for {agent_name}")
+                raise ValueError(f"[CLOWN-CAR][ERROR] Missing source for {agent_name}")
 
-        # Embed source if available
+
         if src_path and Path(src_path).exists():
             try:
                 directive["src_embed"] = base64.b64encode(Path(src_path).read_bytes()).decode()
                 print(f"[CLOWN-CAR] Embedded source for {agent_name}")
             except Exception as e:
                 print(f"[CLOWN-CAR][WARN] Failed to embed {agent_name}: {e}")
+                raise ValueError(f"[CLOWN-CAR][WARN] Failed to embed {agent_name}: {e}")
+        else:
+            if not directive.get("src_embed"):
+                raise ValueError(f"[CLOWN-CAR][WARN] Failed to embed src_embed: {directive.get('name')}")
 
         # Recurse only into children
         for child in directive.get("children", []):
             embed_agent_sources(child, base_path=base_path)
 
-    # If list of nodes, recurse each
     elif isinstance(directive, list):
         for item in directive:
-            embed_agent_sources(item, base_path=base_path)
+            if not embed_agent_sources(item, base_path=base_path):
+                raise ValueError(f"[CLOWN-CAR][WARN] Failed to embed")
 
 def set_hash_bang(directive, base_path=None):
     """
     Embeds a cryptographic hashbang into the directive to ensure its integrity.
-
-    The hashbang is computed using a cryptographic hash (e.g., SHA-256) of the directive's content, excluding the hashbang itself.
-    This ensures that any tampering with the directive can be detected by verifying the hash before execution.
-
-    Parameters:
-        directive (dict): The directive to modify, typically a JSON-like dictionary.
-        base_path (str): The base directory where additional files or agents may be located (if required for hashing).
-
-    Returns:
-        None: The `directive` is modified in place with the added hashbang.
-
-    Raises:
-        ValueError: If the directive is invalid or cannot be serialized into JSON format.
-
-    Example:
-        Input:
-        {
-            "agents": [
-                {"name": "gatekeeper", "lang": "python"}
-            ]
-        }
-
-        Output:
-        {
-            "agents": [
-                {"name": "gatekeeper", "lang": "python"}
-            ],
-            "hashbang": "sha256:abc123..."
-        }
+    [Full docstring provided above]
     """
+    # Early exit for empty directives
     if not directive:
         return
+
+    # Validate directive type
+    if not isinstance(directive, (dict, list)):
+        raise ValueError(f"Invalid directive: Expected dict or list, got {type(directive).__name__}")
 
     if isinstance(directive, dict):
         agent_name = directive.get("name")
         src_path = directive.get("src")
         lang_hint = directive.get("lang", "python")
 
+        # Check for required keys (example - if "name" and "src" are essential)
+        if not src_path and not agent_name:
+            raise ValueError("Invalid directive: Missing required keys 'name' and/or 'src'.")
+
         # Resolve path if missing
         if not src_path and agent_name and base_path:
             found = resolve_agent_source(agent_name, base_path, lang_hint)
-            if found:
+            if not found:
+                raise ValueError(f"Unable to resolve source path for agent '{agent_name}' in base path '{base_path}'.")
+            else:
                 directive["src"] = found
                 src_path = found
 
         # Hash embedded code first
         if "src_embed" in directive:
-            src_bytes = base64.b64decode(directive["src_embed"])
+            try:
+                src_bytes = base64.b64decode(directive["src_embed"])
+            except Exception:
+                raise ValueError("Invalid directive: 'src_embed' must be a valid Base64-encoded string.")
             directive["hash_bang"] = hashlib.sha256(src_bytes).hexdigest()
         elif src_path and Path(src_path).exists():
             directive["hash_bang"] = hashlib.sha256(Path(src_path).read_bytes()).hexdigest()
 
-        # Recurse only into children
+        # Recurse into children
         for child in directive.get("children", []):
             set_hash_bang(child, base_path=base_path)
 

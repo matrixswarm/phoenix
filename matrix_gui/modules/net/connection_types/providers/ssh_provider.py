@@ -1,6 +1,6 @@
 from .base_provider import ConnectionProviderInterface
 
-class SSHConnectionProvider(ConnectionProviderInterface):
+class SSH(ConnectionProviderInterface):
 
     def get_columns(self):
         return ["Label", "Host", "Port", "User", "Auth", "Fingerprint", "Default Channel", "Serial"]

@@ -1,4 +1,4 @@
-from PyQt6.QtWidgets import QLabel, QFormLayout, QLineEdit, QComboBox
+from PyQt6.QtWidgets import QFormLayout, QLineEdit, QComboBox
 from .base_editor import ConnectionEditorInterface
 
 class DiscordConnectionEditor(ConnectionEditorInterface):

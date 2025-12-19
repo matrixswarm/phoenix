@@ -14,6 +14,7 @@ from matrix_gui.modules.net.connection_types.providers.registry import CONNECTIO
 from matrix_gui.modules.net.edit_connection_dialog import edit_connection_dialog
 from matrix_gui.core.event_bus import EventBus
 from matrix_gui.core.emit_gui_exception_log import emit_gui_exception_log
+from matrix_gui.modules.vault.services.vault_core_singleton import VaultCoreSingleton
 
 
 class ConnectionManagerDialog(QtWidgets.QDialog):
@@ -24,11 +25,11 @@ class ConnectionManagerDialog(QtWidgets.QDialog):
     - No per-proto if/else logic
     """
 
-    def __init__(self, vault, parent=None):
+    def __init__(self, parent=None):
         super().__init__(parent)
 
         try:
-            self.vault = vault
+
             self.setWindowTitle("Connection Manager")
             self.setMinimumSize(900, 500)
 
@@ -84,8 +85,13 @@ class ConnectionManagerDialog(QtWidgets.QDialog):
     # -------------------------------------------------------------
     # UTILITIES
     # -------------------------------------------------------------
+    def _vault(self):
+        """Always fetch the live vault snapshot."""
+        return VaultCoreSingleton.get().read()
+
     def _connection_manager(self):
-        return self.vault.setdefault("connection_manager", {})
+        v = self._vault()
+        return v.setdefault("connection_manager", {})
 
     def _current_proto(self):
         idx = self.tabs.currentIndex()
@@ -137,7 +143,7 @@ class ConnectionManagerDialog(QtWidgets.QDialog):
 
         try:
             used = []
-            deployments = self.vault.get("deployments", {})
+            deployments = self._vault().get("deployments", {})
 
             for dep_id, dep in deployments.items():
                 if not isinstance(dep, dict):
@@ -175,7 +181,7 @@ class ConnectionManagerDialog(QtWidgets.QDialog):
             cm = self._connection_manager()
             cm.setdefault(new_proto, {})[conn_id] = data
 
-            EventBus.emit("vault.save.requested")
+            VaultCoreSingleton.get().patch("connection_manager", cm)
             self.reload_all()
 
         except Exception as e:
@@ -234,9 +240,10 @@ class ConnectionManagerDialog(QtWidgets.QDialog):
                 return
 
             # Update the existing record in place
+            cm = self._connection_manager()
             cm[proto][conn_id] = data
 
-            EventBus.emit("vault.save.requested")
+            VaultCoreSingleton.get().patch("connection_manager", cm)
             self.reload_all()
 
         except Exception as e:
@@ -276,6 +283,8 @@ class ConnectionManagerDialog(QtWidgets.QDialog):
         if confirm != QMessageBox.StandardButton.Yes:
             return
 
-        self._connection_manager()[proto].pop(conn_id, None)
-        EventBus.emit("vault.save.requested")
+        cm = self._connection_manager()
+        cm[proto].pop(conn_id, None)
+
+        VaultCoreSingleton.get().patch("connection_manager", cm)
         self.reload_all()

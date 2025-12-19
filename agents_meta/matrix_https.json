@@ -1,0 +1,32 @@
+{
+    "name": "matrix_https",
+    "universal_id": "matrix-https",
+    "constraints": [
+        {
+            "packet_signing": {
+                "in": true,
+                "out": true
+            }
+        },
+        {
+            "connection_cert": {}
+        },
+        {
+            "https": {}
+        }
+    ],
+    "config": {
+        "service-manager": [],
+        "role": [
+            "hive.2fa@cmd_2fa_transport"
+        ],
+        "ui": {
+            "agent_tree": {
+                "emoji": "\ud83c\udf10"
+            },
+            "panel": [
+                "matrix_https.config"
+            ]
+        }
+    }
+}

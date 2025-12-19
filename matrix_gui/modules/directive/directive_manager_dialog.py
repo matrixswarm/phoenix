@@ -13,133 +13,143 @@ from copy import deepcopy
 from PyQt6 import QtWidgets, QtCore
 
 from PyQt6.QtWidgets import (
-    QDialog, QVBoxLayout, QHBoxLayout, QFileDialog, QMessageBox, QCheckBox, QGroupBox
+    QVBoxLayout, QHBoxLayout, QFileDialog, QMessageBox, QDialog, QPushButton,QWidget
 )
 from pathlib import Path
 from runpy import run_path
-from matrix_gui.modules.vault.crypto.deploy_tools import generate_swarm_encrypted_directive, decrypt_swarm_encrypted_directive
+from matrix_gui.modules.vault.crypto.deploy_tools import generate_swarm_encrypted_directive
 from matrix_gui.modules.directive.encryption_staging_dialog import EncryptionStagingDialog
 from matrix_gui.modules.directive.ui.deployment_dialog import DeploymentDialog
 from matrix_gui.modules.directive.deploy_options_dialog import DeployOptionsDialog
 from matrix_gui.core.event_bus import EventBus
-from matrix_gui.modules.directive.connection_assignment_dialog import ConnectionAssignmentDialog
-from matrix_gui.modules.directive.deployment.helper.mint_directive_for_deployment import mint_directive_for_deployment
+
 from matrix_gui.modules.directive.deployment.helper.mint_deployment_metadata import mint_deployment_metadata
 from matrix_gui.core.dialog.agent_root_check_dialog import AgentRootCheckDialog
 from matrix_gui.core.class_lib.paths.agent_root_selector import AgentRootSelector
 from matrix_gui.core.emit_gui_exception_log import emit_gui_exception_log
-from PyQt6.QtWidgets import QInputDialog, QListWidget, QPushButton, QTextEdit, QLabel, QComboBox
+from PyQt6.QtWidgets import QInputDialog, QListWidget, QPushButton, QTextEdit, QLabel, QSplitter
 from matrix_gui.modules.vault.crypto.deploy_tools import write_encrypted_bundle_to_file
-from matrix_gui.modules.directive.deployment.wrapper import agent_aggregator_wrapper, agent_connection_wrapper, agent_cert_wrapper, agent_directive_wrapper , agent_signing_cert_wrapper, agent_symmetric_encryption_wrapper
 from matrix_gui.modules.vault.ui.dump_vault_popup import DumpVaultPopup
-from matrix_gui.modules.directive.graph.swarm_workspace import SwarmWorkspaceDialog
+from matrix_gui.modules.vault.services.vault_core_singleton import VaultCoreSingleton
+from matrix_gui.swarm_workspace.workspace_manager import WorkspaceManagerDialog
+from matrix_gui.swarm_workspace.swarm_workspace import SwarmWorkspaceDialog
+
 
 class DirectiveManagerDialog(QDialog):
-    vault_updated = QtCore.pyqtSignal(dict)
-    def __init__(self, vault_data, password, vault_path, parent=None):
-        super().__init__(parent)
+    """
+    Commander Edition – Directive Manager
+    Left: Workspace Manager (click to open full workspace)
+    Right: Deployed Directives list (unchanged)
+    """
+
+    def __init__(self):
+        super().__init__()
 
         try:
-            self.setWindowTitle("Directive Manager")
-            self.setMinimumSize(900, 620)
+            self.setWindowTitle("Directive Manager – Commander Edition")
+            self.setMinimumSize(1100, 700)
 
-            self.vault_data = vault_data
-            self.password = password
-            self.vault_path = vault_path
-
-            self.directives = self.vault_data.setdefault("directives", {})
-            self.deployments = self.vault_data.setdefault("deployments", {})
-
-            self.vault_data = vault_data or {}
-            if not isinstance(self.vault_data, dict):
-                self.vault_data = {}
-
-            v = self.vault_data
-            for key, val in (self.vault_data.get("deployments") or {}).items():
-                if not isinstance(val, dict):
-                    continue  # skip corrupted deployment entries
-                label = val.get("label", key)
-
-            for key, val in (self.vault_data.get("directives") or {}).items():
-                if not isinstance(val, dict):
-                    continue
-                label = val.get("label", key)
-
+            # =============================================================
+            # MAIN LAYOUT
+            # =============================================================
             main_layout = QVBoxLayout(self)
+            splitter = QSplitter()
+            main_layout.addWidget(splitter)
 
-            lists_row = QHBoxLayout()
+            # =============================================================
+            # LEFT PANEL — WORKSPACE MANAGER
+            # =============================================================
+            self.workspace_manager = WorkspaceManagerDialog()
+            splitter.addWidget(self.workspace_manager)
 
-            # -- Saved Directives Panel --
-            saved_layout = QVBoxLayout()
-            saved_layout.addWidget(QLabel("Saved Directives"))
-            self.saved_list_widget = QListWidget()
-            saved_layout.addWidget(self.saved_list_widget)
-            # --- Button row for Saved Directives ---
-            saved_btn_row = QHBoxLayout()
-            self.load_btn = QPushButton("Load Directive")
-            self.save_btn = QPushButton("Save to Vault")
-            self.deploy_btn = QPushButton("Deploy")
-            self.delete_saved_btn = QPushButton("Delete Saved")
+            # Hook event: when user opens or creates a workspace
+            self.workspace_manager.workspace_selected.connect(self._on_workspace_opened)
 
-            saved_btn_row.addWidget(self.load_btn)
-            saved_btn_row.addWidget(self.save_btn)
-            saved_btn_row.addWidget(self.deploy_btn)
-            saved_btn_row.addWidget(self.delete_saved_btn)
-            saved_layout.addLayout(saved_btn_row)
+            # =============================================================
+            # RIGHT PANEL — DEPLOYED DIRECTIVES
+            # =============================================================
 
-            # -- Deployed Directives Panel --
-            deployed_layout = QVBoxLayout()
-            deployed_layout.addWidget(QLabel("Deployed Directives"))
-            self.deployed_list_widget = QListWidget()
-            deployed_layout.addWidget(self.deployed_list_widget)
-            # --- Button row for Deployed Directives ---
-            deployed_btn_row = QHBoxLayout()
-            self.delete_deployed_btn = QPushButton("Delete Deployed")
-            deployed_btn_row.addWidget(self.delete_deployed_btn)
+            deployed_panel = self._build_deployed_panel()
+            splitter.addWidget(deployed_panel)
 
-            deployed_layout.addLayout(deployed_btn_row)
+            # Populate initial list of deployments
+            self._populate_deployed()
 
-            lists_row.addLayout(saved_layout)
-            lists_row.addLayout(deployed_layout)
-            main_layout.addLayout(lists_row)
 
-            self.editor = QTextEdit()
-            self.editor.setPlaceholderText("Edit directive JSON here...")
-            main_layout.addWidget(self.editor)
+
+
+
+            splitter.setStretchFactor(0, 2)
+            splitter.setStretchFactor(1, 1)
             self.setLayout(main_layout)
 
-            self.view_swarmkey_btn = QPushButton("View Swarm Key")
-            self.view_swarmkey_btn.clicked.connect(self.show_swarm_key)
-
-            deployed_btn_row.addWidget(self.view_swarmkey_btn)
-
-            # -- Connect Buttons --
-            self.load_btn.clicked.connect(self.load_directive_file)
-            self.save_btn.clicked.connect(self.save_to_vault)
-            self.deploy_btn.clicked.connect(self.deploy_directive)
-            self.delete_saved_btn.clicked.connect(self.delete_saved_directive)
-            self.delete_deployed_btn.clicked.connect(self.delete_deployed)
-
-            self.saved_list_widget.itemClicked.connect(self.load_selected)
-
-            #dump vault button and handler
-            self.dump_vault_btn = QPushButton("Dump Vault")
-            self.dump_vault_btn.clicked.connect(self.dump_vault)
-            saved_btn_row.addWidget(self.dump_vault_btn)
-
-            #use graph to deply
-            #self.graph_btn = QPushButton("View / Edit Swarm Graph")
-            #self.graph_btn.clicked.connect(self._open_swarm_graph)
-            #saved_btn_row.addWidget(self.graph_btn)
-
-            self.vault_key_path = self.vault_path.replace(".json", ".key.enc")
-            # (Optional: deployed_list_widget connection if needed for view details, etc.)
-
-            self.refresh_lists()
         except Exception as e:
-            emit_gui_exception_log("PhoenixControlPanel.launch", e)
+            emit_gui_exception_log("DirectiveManagerDialog.__init__", e)
 
-    def show_swarm_key(self):
+    # ------------------------------------------------------------------
+    # RIGHT PANEL BUILDER
+    # ------------------------------------------------------------------
+    def _build_deployed_panel(self):
+        """Builds the legacy Deployed Directives panel (right side)."""
+        panel = QWidget()
+        layout = QVBoxLayout(panel)
+
+        title = QLabel("Deployed Directives")
+        title.setStyleSheet("font-weight:bold; color:#00ff88; font-size:14px;")
+        layout.addWidget(title)
+
+        btn_row = QHBoxLayout()
+
+        self.deployed_list_widget = QListWidget()
+        layout.addWidget(self.deployed_list_widget)
+
+        self.view_swarmkey_btn = QPushButton("View Swarm Key")
+        self.view_swarmkey_btn.clicked.connect(self._show_swarm_key)
+
+        btn_row.addWidget(self.view_swarmkey_btn)
+
+        self.delete_deployed_btn = QPushButton("🗑 Delete Deployed")
+        btn_row.addWidget(self.delete_deployed_btn)
+        layout.addLayout(btn_row)
+
+
+        self.dump_vault_btn = QPushButton("Dump Vault")
+        self.dump_vault_btn.clicked.connect(self._dump_vault)
+        btn_row.addWidget(self.dump_vault_btn)
+
+        self.delete_deployed_btn.clicked.connect(self._on_delete_deployed)
+
+        return panel
+
+    # ------------------------------------------------------------------
+    # WORKSPACE OPEN HANDLER
+    # ------------------------------------------------------------------
+    def _on_workspace_opened(self, uuid):
+        try:
+            if not uuid:
+                return
+            vcs = VaultCoreSingleton.get()
+            workspaces = vcs.data.setdefault("workspaces", {})
+            workspace = workspaces.get(uuid)
+            if not workspace:
+                QMessageBox.warning(self, "Missing Workspace",
+                                    f"Workspace {uuid[:8]} not found in vault.")
+                return
+
+            base_dir = Path(__file__).resolve().parents[2]
+            agents_root = str(base_dir / "agents_meta")
+
+            dlg = SwarmWorkspaceDialog(agents_root, workspace)
+            dlg.exec()
+
+            # refresh deployments after close
+            #self._refresh_deployed_list()
+            self._populate_deployed()
+
+        except Exception as e:
+            emit_gui_exception_log("DirectiveManagerDialog._on_workspace_opened", e)
+
+    def _show_swarm_key(self):
 
         try:
             # Ensure a deployment is selected
@@ -149,7 +159,10 @@ class DirectiveManagerDialog(QDialog):
                 return
 
             dep_id = item.text().split(" :: ")[0].strip()
-            dep = (self.vault_data.get("deployments", {}) or {}).get(dep_id)
+            vcs = VaultCoreSingleton.get()
+            dep_store = vcs.get_store("deployments")
+
+            dep = dep_store.get_dep(dep_id)
             if not dep:
                 QMessageBox.warning(self, "Not Found", f"Deployment '{dep_id}' not found in vault.")
                 return
@@ -185,41 +198,22 @@ class DirectiveManagerDialog(QDialog):
             emit_gui_exception_log("PhoenixControlPanel.launch", e)
 
 
-    def dump_vault(self):
+    def _dump_vault(self):
         """
         Save the entire self.vault_data to a pretty-printed JSON file for debugging.
         """
         try:
-
-            vault_str = json.dumps(self.vault_data, indent=2)
+            vcs = VaultCoreSingleton.get()  # get the active authoritative instance
+            vault_data = vcs.read()  # deep copy of the FULL vault
+            vault_str = json.dumps(vault_data, indent=2)
             dlg = DumpVaultPopup(vault_str, parent=self)
             dlg.exec()
 
         except Exception as e:
             QMessageBox.critical(self, "Dump Failed", str(e))
 
-    def refresh_list(self):
 
-        try:
-            self.saved_list_widget.clear()
-            for key, val in self.directives.items():
-                label = val.get("label", key)
-                self.saved_list_widget.addItem(f"{key} :: {label}")
-        except Exception as e:
-            emit_gui_exception_log("PhoenixControlPanel.launch", e)
-
-    def _sanitize_vault(self):
-
-        try:
-            deployments = self.vault_data.get("deployments", {})
-            for dep_id in list(deployments):
-                if not isinstance(deployments[dep_id], dict):
-                    print(f"[VAULT] 🚮 Purged corrupt deployment {dep_id}")
-                    deployments.pop(dep_id, None)
-        except Exception as e:
-            emit_gui_exception_log("PhoenixControlPanel.launch", e)
-
-    def delete_deployed(self):
+    def _on_delete_deployed(self):
 
         try:
             item = self.deployed_list_widget.currentItem()
@@ -228,7 +222,11 @@ class DirectiveManagerDialog(QDialog):
                 return
 
             dep_id = item.text().split(" :: ")[0].strip()
-            deps = self.vault_data.get("deployments", {})
+
+            vcs = VaultCoreSingleton.get()
+            dep_store = vcs.get_store("deployments")
+
+            deps = dep_store.get_data()
             if dep_id not in deps:
                 QMessageBox.warning(self, "Not Found", f"Deployment '{dep_id}' not found in vault.")
                 return
@@ -239,179 +237,165 @@ class DirectiveManagerDialog(QDialog):
             if resp != QMessageBox.StandardButton.Yes:
                 return
 
-            deps.pop(dep_id, None)
-            EventBus.emit("vault.update", vault_path=self.vault_path,
-                          password=self.password, data=self.vault_data)
+            success = dep_store.delete_dep(dep_id)
+
+            if not success:
+                QMessageBox.warning(self, "Error", f"Failed to delete {dep_id}.")
+
             self.refresh_lists()
 
         except Exception as e:
             emit_gui_exception_log("PhoenixControlPanel.launch", e)
 
-    def decrypt_and_verify_directive(self):
-
+    def _populate_deployed(self):
+        """Populates the Deployed Directives list from the live vault."""
         try:
-            """Decrypt an encrypted directive JSON file for verification."""
-            with open("./matrix_gui/deploy/aaaaa.enc.json", "r") as f:
-                encrypted_bundle = json.load(f)
+            if not hasattr(self, "deployed_list_widget"):
+                print("[DEPLOYMENTS] UI not ready yet.")
+                return
 
-            swarm_key_b64 = "zed_is_dead"
-            directive = decrypt_swarm_encrypted_directive(encrypted_bundle, swarm_key_b64)
+            self.deployed_list_widget.clear()
 
-            # Pretty-print decrypted directive for verification:
-            print(json.dumps(directive, indent=2))
+            vcs = VaultCoreSingleton.get()
+            dep_store = vcs.get_store("deployments")
+            deployments = dep_store.get_data() or {}
+
+            if not deployments:
+                self.deployed_list_widget.addItem("(no deployments found)")
+                return
+
+            for dep_id, dep_val in deployments.items():
+                if not isinstance(dep_val, dict):
+                    continue
+                label = dep_val.get("label", dep_id)
+                self.deployed_list_widget.addItem(f"{dep_id} :: {label}")
 
         except Exception as e:
-            print(f"[decrypt_and_verify_directive][error]: {e}")
-            QMessageBox.critical(self, "Error", f"Error decrypt_and_verify_directive alert:\n{e}")
+            emit_gui_exception_log("DirectiveManagerDialog._populate_deployed", e)
 
     def refresh_lists(self):
 
         try:
-            self.saved_list_widget.clear()
-            for key, val in (self.vault_data.get("directives") or {}).items():
+            #self.saved_list_widget.clear()
+
+            vcs = VaultCoreSingleton.get()
+            dir_store = vcs.get_store("directives")
+
+            directives =  dir_store.get_data()
+
+
+            for key, val in  directives.items():
                 if not isinstance(val, dict):
                     continue
-                self.saved_list_widget.addItem(f"{key} :: {val.get('label', key)}")
+                #self.saved_list_widget.addItem(f"{key} :: {val.get('label', key)}")
 
             self.deployed_list_widget.clear()
-            for key, val in (self.vault_data.get("deployments") or {}).items():
+            vcs = VaultCoreSingleton.get()
+            dep_store = vcs.get_store("deployments")
+
+            deployments = dep_store.get_data()
+            for key, val in deployments.items():
                 if not isinstance(val, dict):
                     continue
                 self.deployed_list_widget.addItem(f"{key} :: {val.get('label', key)}")
         except Exception as e:
             emit_gui_exception_log("PhoenixControlPanel.refresh_lists", e)
 
-    def delete_saved_directive(self):
 
+
+    def _open_swarm_workspace(self):
         try:
-            selected_item = self.saved_list_widget.currentItem()
-            if not selected_item:
-                QMessageBox.warning(self, "No Selection", "Select a saved directive to delete.")
-                return
+            vcs = VaultCoreSingleton.get()
+            vault_data = vcs.data  # live vault reference
 
-            entry = selected_item.text()
-            directive_id = entry.split("::")[0].strip()
-            if not directive_id.startswith("directive_"):
-                QMessageBox.warning(self, "Invalid Selection", "Directive ID not found.")
-                return
-
-            resp = QMessageBox.question(
-                self, "Delete Directive",
-                f"Are you sure you want to delete {directive_id}? This cannot be undone.",
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
-            )
-            if resp != QMessageBox.StandardButton.Yes:
-                return
-
-            if directive_id in self.directives:
-                del self.directives[directive_id]
-                EventBus.emit(
-                    "vault.update",
-                    vault_path=self.vault_path,
-                    password=self.password,
-                    data=self.vault_data
-                )
-                self.refresh_lists()
-
-        except Exception as e:
-            emit_gui_exception_log("DirectiveManagerDialog.delete_saved_directive", e)
-
-    def _open_swarm_graph(self):
-        try:
-            # Step 1. Confirm a directive is selected
-            item = self.saved_list_widget.currentItem()
-            if not item:
-                QMessageBox.warning(self, "No Selection", "Select a directive first.")
-                return
-
-            directive_id = item.text().split("::")[0].strip()
-            directive = self.directives.get(directive_id, {}).get("json", {})
-            if not directive:
-                QMessageBox.warning(self, "Missing Data", "Directive JSON not found.")
-                return
-
-            # Step 2. Locate or create the agents root path
-            agent_path = self.vault_data.get("last_agent_path")
-            verified_path = None
-
-            if agent_path and Path(agent_path).exists():
-                try:
-                    agents_root = AgentRootSelector.resolve_agents_root(agent_path)
-                    missing = AgentRootSelector.verify_all_sources(directive, str(agents_root))
-                    if not missing:
-                        verified_path = str(agents_root)
-                        print(f"[GRAPH] Cached agent path verified: {verified_path}")
-                    else:
-                        print(f"[GRAPH][WARN] Missing sources: {missing}")
-                except Exception as e:
-                    print(f"[GRAPH][ERROR] Failed to validate cached path: {e}")
-
-            if not verified_path:
-                # ask user to locate the root if missing
+            # 1. pick agent path
+            agents_root = vault_data.get("agent_path", "")
+            if not agents_root or not Path(agents_root).exists():
                 dlg = QFileDialog(self)
                 dlg.setFileMode(QFileDialog.FileMode.Directory)
-                dlg.setWindowTitle("Select Agents Root Directory")
-                if dlg.exec():
-                    selected_dir = dlg.selectedFiles()[0]
-                    try:
-                        verified_path = str(AgentRootSelector.resolve_agents_root(selected_dir))
-                        self.vault_data["last_agent_path"] = verified_path
-                        EventBus.emit(
-                            "vault.update",
-                            vault_path=self.vault_path,
-                            password=self.password,
-                            data=self.vault_data,
-                        )
-                    except Exception as e:
-                        QMessageBox.warning(self, "Invalid Path", str(e))
-                        return
+                dlg.setWindowTitle("Select Agent Root Directory")
 
-            # Step 3. Launch the graph workspace
-            # grab path from vault or prompt logic will run inside
-            agents_root = (self.vault_data or {}).get("last_agent_path", "")
-            dlg = SwarmWorkspaceDialog(directive, agents_root)
+                if dlg.exec():
+                    agents_root = dlg.selectedFiles()[0]
+                    vcs.patch("agent_path", agents_root)
+                else:
+                    return
+
+            # 2. choose workspace
+            ws_mgr = WorkspaceManagerDialog(parent=self)
+            if ws_mgr.exec() != QDialog.DialogCode.Accepted:
+                return
+
+            ws_uuid = ws_mgr.selected_uuid
+
+            # 3. use LIVE workspace reference, NOT vault_data copy
+            workspace_data = vcs.data["workspaces"].get(ws_uuid)
+            if workspace_data is None:
+                QMessageBox.warning(self, "Workspace Missing", "Workspace not found in vault.")
+                return
+
+            # 4. Launch workspace editor ONCE
+            from matrix_gui.swarm_workspace.swarm_workspace import SwarmWorkspaceDialog
+            dlg = SwarmWorkspaceDialog(agents_root, workspace_data)
             dlg.exec()
 
+            # 5. Save updated workspaces
+            vcs.patch("workspaces", vcs.data["workspaces"])
+            print("[SWARM WORKSPACE] Saved.")
+
         except Exception as e:
-            emit_gui_exception_log("DirectiveManagerDialog.open_swarm_graph", e)
+            emit_gui_exception_log("DirectiveManagerDialog._open_swarm_workspace", e)
+            print(f"[WORKSPACE][ERROR] {e}")
 
     def load_selected(self):
-        item = self.saved_list_widget.currentItem()
-        if not item:
-            return
-        uid = item.text().split(" :: ")[0]
-        directive = self.directives.get(uid, {}).get("json", {})
-        self.editor.setPlainText(json.dumps(directive, indent=2))
-
-    def load_directive_file(self):
 
         try:
+            item = self.saved_list_widget.currentItem()
+            if not item:
+                return
+            uid = item.text().split(" :: ")[0]
 
-            last_boot_directive_path = self.vault_data.get("last_boot_directive_path","")
+            vcs = VaultCoreSingleton.get()
+            dir_store = vcs.get_store("directives")
+            dir = dir_store.get_dir(uid)
+            if not dir:
+                return
+            self.editor.setPlainText(json.dumps(dir.get("json"), indent=2))
+        except Exception as e:
+            emit_gui_exception_log("DirectiveManagerDialog.load_selected", e)
 
-            path, _ = QFileDialog.getOpenFileName(self, "Select Directive", last_boot_directive_path , "JSON or Python (*.json *.py)")
+    def load_directive_file(self):
+        try:
+            vcs = VaultCoreSingleton.get()
+            vault_data = vcs.read()
+
+            # Use the last stored path if available
+            last_path = vault_data.get("last_boot_directive_path", "")
+            path, _ = QFileDialog.getOpenFileName(
+                self,
+                "Select Directive",
+                last_path,
+                "JSON or Python (*.json *.py)",
+            )
             if not path:
                 return
 
+            # Load the directive content
             if path.endswith(".py"):
                 data = run_path(path)["matrix_directive"]
-
             else:
-                with open(path, "r") as f:
+                with open(path, "r", encoding="utf-8") as f:
                     data = json.load(f)
 
-            dir_path = os.path.dirname(path)
-            self.vault_data["last_directive_load_path"] = dir_path
-            EventBus.emit(
-                "vault.update",
-                vault_path=self.vault_path,
-                password=self.password,
-                data=self.vault_data,
-            )
+            # Remember the folder for the next load
+            vault_data["last_directive_load_path"] = os.path.dirname(path)
+            vcs.patch("last_directive_load_path", vault_data["last_directive_load_path"])
 
+            # Show directive in the editor
+            self.editor.setPlainText(json.dumps(data, indent=2))
 
         except Exception as e:
-            QMessageBox.warning(self, "Load Failed", f"Failed to load directive: {e}")
+            QMessageBox.warning(self, "Load Failed", f"Failed to load directive:\n{e}")
             return
 
         try:
@@ -420,7 +404,6 @@ class DirectiveManagerDialog(QDialog):
             QMessageBox.warning(self, "Editor Load Error", str(e))
 
     def save_to_vault(self):
-
         try:
             directive = json.loads(self.editor.toPlainText())
         except Exception as e:
@@ -429,99 +412,72 @@ class DirectiveManagerDialog(QDialog):
 
         hval = hashlib.sha256(json.dumps(directive, sort_keys=True).encode()).hexdigest()
 
-        for uid, meta in self.vault_data.get("directives", {}).items():
+        vcs = VaultCoreSingleton.get()
+        dir_store = vcs.get_store("directives")
+        directives = dir_store.get_data()
+
+        # --- Duplicate check ---
+        for uid, meta in directives.items():
             if meta.get("directive_hash") == hval:
-                QMessageBox.information(self, "Duplicate Found",
-                    f"Already stored as universe ID: {uid}\nLabel: {meta.get('name','unnamed')}")
+                QMessageBox.information(
+                    self,
+                    "Duplicate Found",
+                    f"Already stored as universe ID: {uid}\nLabel: {meta.get('label', 'unnamed')}",
+                )
                 return
 
-
-        label, ok = QInputDialog.getText(self, "Directive Label", "Enter a label for this directive:")
+        # --- Ask for label ---
+        label, ok = QInputDialog.getText(
+            self, "Directive Label", "Enter a label for this directive:"
+        )
         if not ok or not label.strip():
             return
 
-        uid = "directive_" + uuid.uuid4().hex[:6]
-        self.directives[uid] = {
+        uid = f"directive_{uuid.uuid4().hex[:6]}"
+
+        # --- Store in live vault ---
+        directives[uid] = {
             "label": label.strip(),
-            "json": directive
+            "json": directive,
+            "directive_hash": hval,
         }
 
-        EventBus.emit(
-            "vault.update",
-            vault_path=self.vault_path,
-            password=self.password,
-            data=self.vault_data
-        )
-        self.refresh_list()
+        # Persist to vault (store handles commit + validation)
+        dir_store.commit()
+
+        QMessageBox.information(self, "Saved", f"Directive '{label}' saved to vault.")
+        self.refresh_lists()
 
     def deploy_directive(self):
 
         try:
 
-            # step 1. Select directive from vault
-            item = self.saved_list_widget.currentItem()
-            if not item:
-                QMessageBox.warning(self, "No Selection", "Select a saved directive first.")
-                return
-
-            directive_id = item.text().split("::")[0].strip()
-            directive = self.directives.get(directive_id)
-            if not directive or "json" not in directive:
-                QMessageBox.warning(self, "Missing Data", "Selected directive data is missing.")
-                return
+            vcs = VaultCoreSingleton.get()
 
             # step 2. Generate deployment ID and label
             deployment_id = f"{uuid.uuid4().hex[:16]}"
-            label, ok = QInputDialog.getText(
-                self, "Deployment Label", "Provide a friendly deployment label:",
-                text=directive.get("label", "")
-            )
+
+            label, ok = QInputDialog.getText(self, "Deployment Label", "Provide a friendly deployment label:")
             if not ok or not label.strip():
                 return
 
-            # step 3. Deepcopy and prepare the directive template
-            template_directive = deepcopy(directive["json"])
-            agent_aggregator = agent_aggregator_wrapper(template_directive)
-
             # step 4. Connection assignment via ConnectionAssignmentDialog
-            conn_mgr = self.vault_data.get("connection_manager", {})
+            conn_mgr = vcs.get_section("connection_manager")
 
-            # Handle agents from either "agents" or "children"
-            if not agent_aggregator.count():
-                QMessageBox.warning(self, "No Agents", "No agents found in the deployment directive.")
-                return
 
-            wrapped_agents = agent_connection_wrapper(agent_aggregator)
+            #### HERE DOWN NEW DEPLOYMENT PIPELINE USING SWARM
 
-            conn_dlg = ConnectionAssignmentDialog(self, wrapped_agents, conn_mgr)
-            if conn_dlg.exec() == QDialog.DialogCode.Accepted:
-                conn_dlg.apply_assignments()
-            else:
-                QMessageBox.warning(self, "No Assignments", "Connection assignments required.")
-                return
 
-            wrapped_agents = agent_cert_wrapper(agent_aggregator)
-            #inject certs
-            EventBus.emit("crypto.service.connection_cert.injector", wrapped_agents)
 
-            wrapped_agents = agent_signing_cert_wrapper(agent_aggregator)
-            #inject signing keys
-            EventBus.emit("crypto.service.signing_cert.injector", wrapped_agents)
 
-            wrapped_agents = agent_symmetric_encryption_wrapper(agent_aggregator)
-            # inject signing keys
-            EventBus.emit("crypto.service.symmetric_encryption.injector", wrapped_agents)
 
-            wrapped_agents = agent_directive_wrapper(agent_aggregator)
 
+
+
+            #FOR RAILGUN SUPPORT
+            ssh_map=None
             try:
-                # step 5. Mint the final runtime directive (from template + deployment)
-                directive_staging = mint_directive_for_deployment(template_directive, wrapped_agents, deployment_id)
-            except Exception as e:
-                emit_gui_exception_log("DirectiveManagerDialog.deploy_directive.mint_directive_for_deployment", e)
-
-            try:
-                ssh_map=deepcopy(self.vault_data.get("connection_manager", {}).get("ssh", {}))
+                ssh_map = deepcopy(conn_mgr.get("ssh", {}))
             except Exception as e:
                 pass
 
@@ -575,7 +531,7 @@ class DirectiveManagerDialog(QDialog):
             if clown_car:
 
                 # Load last cached agent path from vault if available
-                agent_path = self.vault_data.get("last_agent_path")
+                agent_path = vcs.data.get("last_agent_path")
 
                 verified_path = None
                 if agent_path and Path(agent_path).exists():
@@ -600,13 +556,8 @@ class DirectiveManagerDialog(QDialog):
                         return
 
                     # Cache the verified path for next deployment
-                    self.vault_data["last_agent_path"] = verified_path
-                    EventBus.emit(
-                        "vault.update",
-                        vault_path=self.vault_path,
-                        password=self.password,
-                        data=self.vault_data,
-                    )
+                    vcs.data["last_agent_path"] = verified_path
+                    vcs.patch("last_agent_path", verified_path)
                     print(f"[CLOWN-CAR] Agent root cached: {verified_path}")
 
                 agent_path = verified_path
@@ -670,17 +621,10 @@ class DirectiveManagerDialog(QDialog):
             )
 
             # Persist in vault (single write; CRUD is trivial now)
-            self.vault_data.setdefault("deployments", {})[deployment_id] = deployment_record
-
-            self._sanitize_vault()
-
-            # Emit + refresh UI
-            EventBus.emit(
-                "vault.update",
-                vault_path=self.vault_path,
-                password=self.password,
-                data=self.vault_data
-            )
+            vcs = VaultCoreSingleton.get()
+            deployments = vcs.data.setdefault("deployments", {})
+            deployments[deployment_id] = deployment_record
+            vcs.patch("deployments", deployments)
             self.refresh_lists()
 
             # === Optional Rail-Gun Fire ===

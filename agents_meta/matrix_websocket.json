@@ -1,0 +1,43 @@
+{
+    "name": "matrix_websocket",
+    "universal_id": "websocket-relay",
+    "constraints": [
+        {
+            "packet_signing": {
+                "in": true,
+                "out": true
+            }
+        },
+        {
+            "connection_cert": {}
+        },
+        {
+            "wss": {}
+        }
+    ],
+    "config": {
+        "ui": {
+            "agent_tree": {
+                "emoji": "\ud83d\udef0\ufe0f"
+            }
+        },
+        "service-manager": [
+            {
+                "role": [
+                    "hive.alert@cmd_send_alert_msg",
+                    "hive.swarm_feed.alert@cmd_send_alert_msg",
+                    "hive.rpc@cmd_rpc_route"
+                ],
+                "scope": [
+                    "parent",
+                    "any"
+                ],
+                "priority": {
+                    "hive.log.delivery": -1,
+                    "hive.proxy.route": 5,
+                    "default": 10
+                }
+            }
+        ]
+    }
+}

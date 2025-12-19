@@ -9,13 +9,13 @@
 import asyncio
 import random
 import traceback
-import sys
+
 
 from playwright.async_api import async_playwright
 from playwright_stealth import stealth_async
 
 # ============================================================
-# 🔧 HARDEN WINDOWS EVENT LOOP
+# HARDEN WINDOWS EVENT LOOP
 # ============================================================
 try:
     asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())

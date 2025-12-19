@@ -63,27 +63,22 @@ def embed_keypair_if_marker(obj, universal_id=None):
 
 def generate_swarm_encrypted_directive(directive, clown_car=True, hashbang=True, base_path = None):
 
-    try:
+    base_path = base_path or os.getcwd()
 
-        base_path = base_path or os.getcwd()
+    if clown_car:
+        embed_agent_sources(directive, base_path=base_path)
 
-        if clown_car:
-            embed_agent_sources(directive, base_path=base_path)
-        if hashbang:
-            set_hash_bang(directive, base_path=base_path)
+    if hashbang:
+        set_hash_bang(directive, base_path=base_path)
 
-        data_bytes = json.dumps(directive, indent=2).encode()
+    data_bytes = json.dumps(directive, indent=2).encode()
 
-        aes_key = get_random_aes_key()
-        encrypted_bundle = encrypt_data(data_bytes, aes_key)
-        directive_hash = hashlib.sha256(data_bytes).hexdigest()
+    aes_key = get_random_aes_key()
+    encrypted_bundle = encrypt_data(data_bytes, aes_key)
+    directive_hash = hashlib.sha256(data_bytes).hexdigest()
 
-        return encrypted_bundle, aes_key, directive_hash
+    return encrypted_bundle, aes_key, directive_hash
 
-    except Exception as e:
-        print(str(e))
-
-    return False
 
 def decrypt_swarm_encrypted_directive(encrypted_bundle: dict, swarm_key_b64: str) -> dict:
     """

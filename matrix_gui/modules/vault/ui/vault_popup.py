@@ -2,10 +2,10 @@ import os
 from PyQt6.QtWidgets import QDialog, QVBoxLayout, QLabel, QPushButton, QLineEdit, QMessageBox, QFileDialog
 from matrix_gui.util.resolve_matrixswarm_base import resolve_matrixswarm_base
 from matrix_gui.core.event_bus import EventBus
-from matrix_gui.modules.vault.services.vault_singleton import VaultSingleton
-from matrix_gui.modules.vault.services.vault_obj import VaultObj
+from matrix_gui.modules.vault.services.vault_core_singleton import VaultCoreSingleton
 from matrix_gui.modules.vault.ui.vault_password_change_dialog import VaultPasswordChangeDialog
 from matrix_gui.modules.vault.crypto.vault_handler import load_vault_singlefile
+
 
 class VaultPasswordDialog(QDialog):
     def __init__(self, parent=None):
@@ -92,16 +92,48 @@ class VaultPasswordDialog(QDialog):
             QMessageBox.critical(self, "Vault Error", "Vault file does not exist.")
             return
 
+
         try:
-            vault_data = load_vault_singlefile(password, self.vault_file_path)
+
+            try:
+                vault_data = load_vault_singlefile(password, self.vault_file_path)
+            except Exception as e:
+                QMessageBox.critical(self, "Incorrect Password",
+                                     "The password you entered is not correct.\nPlease try again.")
+                self.password_input.clear()
+                self.password_input.setFocus()
+                return
+
+            if vault_data is None:
+                QMessageBox.critical(
+                    self,
+                    "Incorrect Password",
+                    "The password you entered is not correct.\nPlease try again."
+                )
+                self.password_input.clear()
+                self.password_input.setFocus()
+                self._unlock_fired = False  # ensure unlock flow stays open
+                return
+
             self.vault_password = password
 
-            vault_obj = VaultObj(
-                path=self.vault_file_path,
-                vault=vault_data,
-                password=password
-            )
-            VaultSingleton.set(vault_obj)
+            if not vault_data or not vault_data.get("deployments"):
+                from matrix_gui.modules.vault.ui.vault_init_dialog import VaultInitDialog
+                dlg = VaultInitDialog(self)
+                if dlg.exec() != QDialog.DialogCode.Accepted:
+                    return  # user cancelled → stay locked
+                # user created/selects vault → overwrite vault_data
+                vault_data = dlg.vault_data
+
+            try:
+                VaultCoreSingleton.initialize(
+                    vault_data=vault_data,
+                    password=self.vault_password,
+                    vault_path=self.vault_file_path
+                )
+            except Exception as e:
+                print(str(e))
+
 
         except Exception as e:
             QMessageBox.critical(self, "Vault Load Failed", f"Vault could not be decrypted:\n{e}")
@@ -130,7 +162,6 @@ class VaultPasswordDialog(QDialog):
 
     def create_vault(self):
         from matrix_gui.modules.vault.ui.vault_init_dialog import VaultInitDialog
-
         dlg = VaultInitDialog(self)
         if dlg.exec() == QDialog.DialogCode.Accepted:
             self.vault_file_path = dlg.vault_path
@@ -140,19 +171,17 @@ class VaultPasswordDialog(QDialog):
 
                 vault_data = load_vault_singlefile(self.vault_password, self.vault_file_path)
 
-                from matrix_gui.modules.vault.services.vault_obj import VaultObj
-                vault_obj = VaultObj(
-                    path=self.vault_file_path,
-                    vault=vault_data,
-                    password=self.vault_password
+                VaultCoreSingleton.initialize(
+                    vault_data=vault_data,
+                    password=self.vault_password,
+                    vault_path=self.vault_file_path
                 )
-                from matrix_gui.modules.vault.services.vault_singleton import VaultSingleton
-                VaultSingleton.set(vault_obj)
-                from matrix_gui.core.event_bus import EventBus
+
                 EventBus.emit("vault.unlocked",
                               vault_path=self.vault_file_path,
                               password=self.vault_password,
                               vault_data=vault_data)
+
                 self.accept()
             except Exception as e:
                 QMessageBox.critical(self, "Vault Creation Failed", f"Failed to create and unlock new vault:\n{e}")

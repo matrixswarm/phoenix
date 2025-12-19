@@ -1,6 +1,6 @@
 from .base_provider import ConnectionProviderInterface
 
-class WSSConnectionProvider(ConnectionProviderInterface):
+class WSS(ConnectionProviderInterface):
 
     def get_columns(self):
         return ["Label", "Host", "Port", "Default Channel", "Serial"]

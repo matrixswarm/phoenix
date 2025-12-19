@@ -1,6 +1,6 @@
 from .base_provider import ConnectionProviderInterface
 
-class EmailConnectionProvider(ConnectionProviderInterface):
+class Email(ConnectionProviderInterface):
 
     def get_columns(self):
         return ["Label", "User", "Server", "Port", 'Encryption', "Default Channel", "Serial"]

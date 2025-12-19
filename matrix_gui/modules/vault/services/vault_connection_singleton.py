@@ -1,4 +1,5 @@
-import threading, time
+import threading, time, copy
+
 from matrix_gui.core.emit_gui_exception_log import emit_gui_exception_log
 
 class VaultConnectionSingleton:
@@ -74,5 +75,5 @@ class VaultConnectionSingleton:
 
     def read_deployment(self):
         with self._lock:
-            import copy
             return copy.deepcopy(self._deployment)
+

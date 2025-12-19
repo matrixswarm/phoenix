@@ -1,7 +1,7 @@
 from .base_provider import ConnectionProviderInterface
 
 
-class MySQLConnectionProvider(ConnectionProviderInterface):
+class MySQL(ConnectionProviderInterface):
 
     def get_columns(self):
         return ["Label", "Host", "Port", "User", "DB", "Default Channel", "Serial"]

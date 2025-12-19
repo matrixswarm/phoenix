@@ -181,10 +181,9 @@ class EmailCheck(PhoenixPanelInterface):
             self._connections = {}
 
             vault = VaultConnectionSingleton.get()
-
-            vault_data = vault.fetch_fresh(target="connection_manager") or {}
-            conn_mgr = vault_data.get("connection_manager", {}) or {}
-            email_conns = conn_mgr.get("email", conn_mgr)
+            # Fetch registry data from cockpit over pipe
+            vault_data = vault.fetch_fresh(target="registry") or {}
+            email_conns = vault_data.get("imap", {})
 
             if not email_conns:
                 self.conn_selector.addItem("No email connections found", userData=None)
@@ -194,9 +193,6 @@ class EmailCheck(PhoenixPanelInterface):
             for conn_id, data in email_conns.items():
 
                 if not isinstance(data, dict):
-                    continue
-
-                if data.get("proto") != "email" or data.get("type") != "incoming":
                     continue
 
                 serial = data.get("serial", "?")

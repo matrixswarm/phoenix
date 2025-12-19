@@ -7,6 +7,7 @@ from .openai_editor import OpenAIConnectionEditor
 from .slack_editor import SlackConnectionEditor
 from .ssh_editor import SSHConnectionEditor
 from .mysql_editor import MySQLConnectionEditor
+from .cdn_editor import CDNConnectionEditor
 
 CONNECTION_EDITOR_REGISTRY = {
     "https": HTTPSConnectionEditor,
@@ -18,4 +19,5 @@ CONNECTION_EDITOR_REGISTRY = {
     "slack": SlackConnectionEditor,
     "ssh": SSHConnectionEditor,
     "mysql": MySQLConnectionEditor,
+    "cdn": CDNConnectionEditor,
 }
