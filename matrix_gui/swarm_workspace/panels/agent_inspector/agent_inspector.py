@@ -6,6 +6,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt
 from matrix_gui.registry.registry_manager import RegistryManagerDialog
 from matrix_gui.swarm_workspace.panels.constraints.constraint_row_widget import ConstraintRowWidget
+from matrix_gui.core.emit_gui_exception_log import emit_gui_exception_log
 from matrix_gui.registry.object_classes import EDITOR_REGISTRY, PROVIDER_REGISTRY
 from .uid_line_edit import UIDLineEdit
 class AgentInspector(QWidget):
@@ -143,6 +144,7 @@ class AgentInspector(QWidget):
 
         self._reload_constraints()
 
+
     # ------------------------------------------------------------
     # CONSTRAINT RELOAD / RENDER
     # ------------------------------------------------------------
@@ -180,6 +182,11 @@ class AgentInspector(QWidget):
                     row.edit_btn.hide()
 
             self.constraint_layout.addWidget(row)
+
+            try:
+                self.workspace.save()
+            except Exception as e:
+                emit_gui_exception_log("AgentInspector._reload_constraints", e)
 
     # ------------------------------------------------------------
     # ASSIGN EXISTING ROW

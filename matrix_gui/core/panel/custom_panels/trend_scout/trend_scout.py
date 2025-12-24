@@ -73,9 +73,6 @@ class TrendScout(PhoenixPanelInterface):
 
         self._connect_signals()
 
-        # initial UI sync
-        self._request_status_refresh()
-
         print("[TREND_FORGE] Topic Forge panel online.")
 
     # ---------------------------------------------------------
@@ -96,61 +93,19 @@ class TrendScout(PhoenixPanelInterface):
         forge_layout = QVBoxLayout(forge_tab)
 
         # ---- Controls row (mode + timers + get ideas)
-        controls_box = QGroupBox("Controls")
-        controls = QVBoxLayout(controls_box)
+        controls_box = QGroupBox("Ideas")
+        controls = QHBoxLayout(controls_box)
 
-        # Mode row
-        mode_row = QHBoxLayout()
-        mode_row.addWidget(QLabel("Mode:"))
-
-        self.mode_combo = QComboBox()
-        self.mode_combo.addItems(["manual", "auto"])
-        self.btn_apply_mode = QPushButton("Apply Mode")
-        self.btn_apply_mode.clicked.connect(self._on_apply_mode)
-
-        self.lbl_mode_status = QLabel("current: ?")
-        self.lbl_mode_status.setStyleSheet("color:#bbb;")
-
-        mode_row.addWidget(self.mode_combo, stretch=0)
-        mode_row.addWidget(self.btn_apply_mode, stretch=0)
-        mode_row.addWidget(self.lbl_mode_status, stretch=1)
-
-        controls.addLayout(mode_row)
-
-        # Timer row
-        timer_row = QHBoxLayout()
-        self.lbl_next_run = QLabel("next idea run: ?")
-        self.lbl_next_run.setStyleSheet("color:#bbb;")
-        self.btn_timer_refresh = QPushButton("Refresh Timer")
-        self.btn_timer_reset = QPushButton("Reset Timer")
-        self.btn_timer_refresh.clicked.connect(self._on_timer_refresh)
-        self.btn_timer_reset.clicked.connect(self._on_timer_reset)
-
-        timer_row.addWidget(self.lbl_next_run, stretch=1)
-        timer_row.addWidget(self.btn_timer_refresh)
-        timer_row.addWidget(self.btn_timer_reset)
-
-        controls.addLayout(timer_row)
-
-        # Get ideas row
-        ideas_row = QHBoxLayout()
-        ideas_row.addWidget(QLabel("Ideas count:"))
+        controls.addWidget(QLabel("Ideas count:"))
         self.count_input = QLineEdit("10")
         self.count_input.setFixedWidth(60)
+        controls.addWidget(self.count_input)
 
         self.btn_get_ideas = QPushButton("Get Ideas")
         self.btn_get_ideas.clicked.connect(self._on_get_ideas)
+        controls.addWidget(self.btn_get_ideas)
 
-        self.btn_refresh_curated = QPushButton("Refresh Curated")
-        self.btn_refresh_curated.clicked.connect(self._on_refresh_curated)
-
-        ideas_row.addWidget(self.count_input)
-        ideas_row.addWidget(self.btn_get_ideas)
-        ideas_row.addWidget(self.btn_refresh_curated)
-        ideas_row.addStretch(1)
-
-        controls.addLayout(ideas_row)
-
+        controls.addStretch(1)
         forge_layout.addWidget(controls_box)
 
         # ---- Main split: Ideas list + Curated list
@@ -220,6 +175,65 @@ class TrendScout(PhoenixPanelInterface):
         self.btn_remove_curated.clicked.connect(self._on_remove_curated)
         curated_header.addWidget(self.btn_remove_curated)
 
+        # === SORA CONFIGURATION CONTROLS ===
+        sora_cfg_box = QGroupBox("Sora Render Settings")
+        sora_cfg_lay = QHBoxLayout(sora_cfg_box)
+
+        # Model selector
+        sora_cfg_lay.addWidget(QLabel("Model:"))
+        self.model_combo = QComboBox()
+        self.model_combo.addItems(["sora-2", "sora-2-pro"])
+        sora_cfg_lay.addWidget(self.model_combo)
+
+        # Resolution selector (auto-updates on model change)
+        sora_cfg_lay.addWidget(QLabel("Resolution:"))
+        self.resolution_combo = QComboBox()
+        self.resolution_combo.addItems(["720x1280", "1280x720"])  # default for sora-2
+        sora_cfg_lay.addWidget(self.resolution_combo)
+
+        # Duration selector
+        sora_cfg_lay.addWidget(QLabel("Duration:"))
+        self.duration_combo = QComboBox()
+        self.duration_combo.addItems(["4", "8", "12"])  # default for sora-2
+        sora_cfg_lay.addWidget(self.duration_combo)
+        idx = self.duration_combo.findText("12")
+        if idx >= 0:
+            self.duration_combo.setCurrentIndex(idx)
+
+
+        sora_cfg_lay.addStretch(1)
+        curated_lay.addWidget(sora_cfg_box)
+
+        # === Dynamic model switching ===
+        def _on_model_change():
+            model = self.model_combo.currentText()
+
+            self.resolution_combo.clear()
+            self.duration_combo.clear()
+
+            if model == "sora-2":
+                self.resolution_combo.addItems(["720x1280", "1280x720"])
+                self.duration_combo.addItems(["4", "8", "12"])
+
+                # set defaults for sora-2
+                self.resolution_combo.setCurrentText("1280x720")  # landscape default
+                # Explicitly select the last entry ("12")
+                idx = self.duration_combo.findText("12")
+                if idx >= 0:
+                    self.duration_combo.setCurrentIndex(idx)
+
+            else:  # sora-2-pro
+                self.resolution_combo.addItems(["1792x1024", "1280x720", "1024x1792", "720x1280"])
+                self.duration_combo.addItems(["4", "8", "12"])
+
+                # set defaults for sora-2-pro
+                self.resolution_combo.setCurrentText("1280x720")
+                idx = self.duration_combo.findText("12")
+                if idx >= 0:
+                    self.duration_combo.setCurrentIndex(idx)
+
+        self.model_combo.currentTextChanged.connect(_on_model_change)
+
         curated_lay.addLayout(curated_header)
 
         self.curated_list = QListWidget()
@@ -228,19 +242,18 @@ class TrendScout(PhoenixPanelInterface):
 
         fire_row = QHBoxLayout()
 
-        # Label + textbox for duration
-        fire_row.addWidget(QLabel("Video duration (sec):"))
-        self.duration_input = QLineEdit("30")
-        self.duration_input.setFixedWidth(60)
-        fire_row.addWidget(self.duration_input)
-
         # Fire button
+        fire_row = QHBoxLayout()
+
         self.btn_fire = QPushButton("🔥 Fire!")
         self.btn_fire.setStyleSheet("font-weight:bold;")
         self.btn_fire.clicked.connect(self._on_fire)
+
         fire_row.addStretch(1)
         fire_row.addWidget(self.btn_fire)
         curated_lay.addLayout(fire_row)
+
+
         split.addWidget(ideas_pane)
         split.addWidget(curated_pane)
         split.setStretchFactor(0, 2)
@@ -340,18 +353,7 @@ class TrendScout(PhoenixPanelInterface):
     # ---------------------------------------------------------
     # UI actions
     # ---------------------------------------------------------
-    def _on_apply_mode(self):
-        mode = (self.mode_combo.currentText() or "manual").strip().lower()
-        if mode not in ("manual", "auto"):
-            QMessageBox.warning(self, "Invalid Mode", "Mode must be manual or auto.")
-            return
-        self._send_service("mode_set", {"mode": mode})
 
-    def _on_timer_refresh(self):
-        self._send_service("timer_get")
-
-    def _on_timer_reset(self):
-        self._send_service("timer_reset")
 
     def _on_get_ideas(self):
         try:
@@ -429,14 +431,17 @@ class TrendScout(PhoenixPanelInterface):
             if resp != QMessageBox.StandardButton.Yes:
                 return
 
-        # Pull duration from the textbox (default 30)
+        model = self.model_combo.currentText()
+        resolution = self.resolution_combo.currentText()
         try:
-            duration_sec = int(self.duration_input.text().strip() or "30")
+            duration_sec = int(self.duration_combo.currentText())
         except ValueError:
-            duration_sec = 30
+            duration_sec = 8  # fallback
 
         self._send_service("fire", {
             "curated_batch": curated_items,
+            "model": model,
+            "resolution": resolution,
             "duration_sec": duration_sec
         })
 
@@ -491,41 +496,19 @@ class TrendScout(PhoenixPanelInterface):
             status = content.get("status", "ok")
             action = content.get("action", "unknown")
 
-            # log
             msg = content.get("message") or ""
             if msg:
                 self.output_box.append(f"✔ {action}: {msg}")
             else:
                 self.output_box.append(f"✔ {action} (status={status})")
 
-            # route updates
-            if action in ("mode_get", "mode_set"):
-                mode = content.get("mode") or content.get("data", {}).get("mode")
-                if mode:
-                    self.lbl_mode_status.setText(f"current: {mode}")
-                    # sync combobox without triggering extra stuff
-                    idx = self.mode_combo.findText(mode)
-                    if idx >= 0:
-                        self.mode_combo.setCurrentIndex(idx)
-
-            if action in ("timer_get", "timer_reset"):
-                nxt = content.get("next_idea_run") or content.get("data", {}).get("next_idea_run")
-                if nxt:
-                    self.lbl_next_run.setText(f"next idea run: {nxt}")
-
-            if action in ("generate_ideas", "modify_ideas"):
-                self.current_batch_id = content.get("batch_id") or content.get("data", {}).get("batch_id")
-                ideas = content.get("ideas") or content.get("data", {}).get("ideas") or []
+            if action == "generate_ideas":
+                self.current_batch_id = content.get("batch_id")
+                ideas = content.get("ideas") or []
                 self._render_ideas(ideas)
 
-            if action in ("curate_list", "curate_add", "curate_add_all", "curate_remove", "fire"):
-                curated = content.get("curated") or content.get("data", {}).get("curated")
-                if curated is not None:
-                    self._render_curated(curated)
-                else:
-                    # if backend doesn't return snapshot on write, we request it
-                    if action != "curate_list":
-                        self._send_service("curate_list")
+            # fire doesn't need special UI, just log the message
+            # no mode/timer/curate_list handling in lite mode
 
             # keep debug pane helpful
             try:
@@ -589,14 +572,6 @@ class TrendScout(PhoenixPanelInterface):
 
         self.output_box.append(f"📌 Curated list now {len(self.last_curated)} item(s).")
 
-    # ---------------------------------------------------------
-    # Status bootstrap
-    # ---------------------------------------------------------
-    def _request_status_refresh(self):
-        # fetch mode + timer + curated snapshot
-        self._send_service("mode_get")
-        self._send_service("timer_get")
-        self._send_service("curate_list")
 
     # ---------------------------------------------------------
     # Panel handling

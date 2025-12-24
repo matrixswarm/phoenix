@@ -23,7 +23,6 @@ class RegistryConstraintHandler:
         if not obj:
             return {}
 
-
         editor_cls = EDITOR_REGISTRY.get(cls_name)
         if not editor_cls:
             return obj  # fallback – raw registry object

@@ -1,6 +1,6 @@
 {
     "name": "rsync_boy",
-    "universal_id": "i-clone-u",
+    "universal_id": "rsync-boy-1",
     "constraints": [
         {
             "packet_signing": {
@@ -10,6 +10,9 @@
         },
         {
             "ssh": null
+        },
+        {
+            "mysql": null
         }
     ],
     "config": {
