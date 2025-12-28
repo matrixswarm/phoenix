@@ -325,7 +325,7 @@ class SessionWindow(QMainWindow):
     # --- Builders ---
     def _build_tree_panel(self):
         try:
-            box = QGroupBox("🐦 Agent Tree")
+            box = QGroupBox("🦉 Agent Tree")
 
             layout = QVBoxLayout()
             layout.setContentsMargins(6, 4, 6, 4)  # (L, T, R, B)

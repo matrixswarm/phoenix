@@ -1,7 +1,7 @@
 # Authored by Daniel F MacDonald and ChatGPT-5.1 (“The Generals”)
 import paramiko
 from paramiko import RSAKey, Ed25519Key
-import io, base64
+import io, base64, uuid
 from PyQt6.QtWidgets import QMessageBox
 from hashlib import sha256
 from PyQt6.QtWidgets import (
@@ -142,6 +142,12 @@ class SSH(BaseEditor):
         mode = out["auth_type"]
         if mode == "password":
             out["password"] = self.password.text().strip()
+            out["private_key"] = "None"
+            out["private_key_passphrase"] = "None"
+
+            # Generate a fresh random env variable name on each save
+            env_name = f"PASSWORD_ENV_{uuid.uuid4().hex.upper()}"
+            out["password_env"] = env_name
         elif mode == "private_key":
             out["private_key"] = self.private_key.toPlainText().strip()
             out["private_key_passphrase"] = self.passphrase.text().strip() or "None"
