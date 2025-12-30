@@ -128,6 +128,13 @@ class EmailCheck(PhoenixPanelInterface):
         except Exception as e:
             emit_gui_exception_log("EmailCheck._build_layout", e)
 
+    def _fmt_user_host(self, user: str, host: str) -> str:
+        user = (user or "").strip()
+        host = (host or "").strip()
+        if not user:
+            return f"(no-user)@{host}" if host else "(no-user)"
+        return user if "@" in user else f"{user}@{host}"
+
     def _delete_selected(self):
         """Delete selected messages directly from the mailbox view."""
         try:
@@ -200,7 +207,8 @@ class EmailCheck(PhoenixPanelInterface):
                 user = data.get("incoming_username", "")
                 host = data.get("incoming_server", "")
                 port = data.get("incoming_port", "")
-                display = f"{label} ({user}@{host}:{port})"
+                uh = self._fmt_user_host(user, host)
+                display = f"{label} ({uh}:{port})"
 
                 info = {"conn_id": conn_id, "serial": serial, "cfg": data}
                 self.conn_selector.addItem(display, userData=info)
@@ -381,7 +389,8 @@ class EmailCheck(PhoenixPanelInterface):
                 host = cfg.get("incoming_server", "?")
                 port = cfg.get("incoming_port", "?")
                 user = cfg.get("incoming_username", "?")
-                display = f"acct: {serial} ★ host: {user}@{host}:{port}"
+                uh = self._fmt_user_host(user, host)
+                display = f"acct: {serial} ★ host: {uh}:{port}"
 
                 info = {"conn_id": serial, "serial": serial, "cfg": cfg}
                 self.conn_selector.addItem(display, userData=info)
