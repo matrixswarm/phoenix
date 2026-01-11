@@ -1,5 +1,5 @@
 from abc import ABCMeta, abstractmethod
-from PyQt6.QtWidgets import QWidget, QLineEdit, QDialog, QVBoxLayout, QDialogButtonBox
+from PyQt6.QtWidgets import QWidget,  QLineEdit, QComboBox, QDialog, QVBoxLayout, QDialogButtonBox
 import uuid, random
 
 class EditorABCMeta(type(QWidget), ABCMeta):
@@ -91,8 +91,25 @@ class BaseEditor(QWidget, metaclass=EditorABCMeta):
     def is_validated(self) -> bool:
         pass
 
+    # Path override
     def get_directory_path(self):
-        return ["config"]
+        """
+        Returns the selected directory path as a list.
+        Example: "config/imap_bk" → ["config", "imap_bk"]
+        """
+        r=["config"]
+        try:
+            value = self.path_selector.currentText().strip()
+            #dd=value.split("/")
+            #print(f"Success: 'path_selector' is defined for {dd}")
+            r=value.split("/")
+
+        except AttributeError as e:
+            print(f"Error: 'path_selector' is not defined or is not a QComboBox. {e}")
+
+        finally:
+            return r
+
 
     def get_serial(self)-> str:
         return self.serial.text().strip()

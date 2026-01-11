@@ -1,4 +1,5 @@
 from ..constraint.autogen_constraint import AutoGenConstraint
+from matrix_gui.swarm_workspace.cls_lib.constraint.constraint_object import Constraint
 class DeploymentCompiler:
 
     def __init__(self, ir_map, root_gid):
@@ -24,23 +25,48 @@ class DeploymentCompiler:
             "children": []
         }
 
+        #if(agent_ir.name=="matrix_email"):
+        #    print(agent_ir.node)
+
         # Commander Edition – integrate autogen certs and preserve connections
         node["connection"] = agent_ir.node.get("connection", {})  # keep what we already have
 
         for con in agent_ir.resolved.values():
             try:
-                # Preserve existing connection block instead of overwriting
-                editor = getattr(con, "handler", None)
-                if editor and hasattr(editor, "is_connection") and editor.is_connection():
-                    node["connection"].update(con.fields)
+
+                if not isinstance(con, Constraint):
+                    print('not a constraint')
                     continue
+
+                # Preserve existing connection block instead of overwriting
+                try:
+
+                    if(agent_ir.name=="matrix_email"):
+                        print(con.get_meta())
+
+                    #now we inject the connection details into the deployment
+                    editor=con.get_editor()
+                    if editor.is_connection():
+                        node["connection"].update(con.get_fields())
+                        continue
+
+                    #this is a special case, that allows constraint that isn't
+                    #a connection to be injected into the deployment, e.g. matrix_email;
+                    elif con.inject_into_connection():
+                        node["connection"].update(con.get_fields())
+                        #print(f"XXXXXXXXXXXXXXXXXXXXXXXXXXXXX{node['universal_id']} -> {node["connection"]}")
+
+
+                except Exception as e:
+                    print(f"{con.get_constraint_name()} has no handler {e}")
+                    pass
 
                 # Route certs & crypto bundles into certs section
                 base = self.certs.setdefault(agent_ir.universal_id, {})
                 if hasattr(con, "path") and con.path:
-                    AutoGenConstraint.set_nested(base, con.path, con.fields)
+                    AutoGenConstraint.set_nested(base, con.path, con.get_fields())
                 else:
-                    base.update(con.fields)
+                    base.update(con.get_fields())
 
             except Exception as e:
                 print(f"[DEPLOY][WARN] Connection/cert injection error for {agent_ir.name}: {e}")

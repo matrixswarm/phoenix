@@ -25,8 +25,12 @@ class SSH(BaseEditor):
         default_channel_options = default_channel_options or ["ssh"]
         self.default_channel.addItems(default_channel_options)
 
-        # --- Key Generation Section ---
-
+        self.path_selector = QComboBox()
+        # node directive path - add as you see fit
+        self.path_selector.addItems([
+            "config/ssh",  # default
+            # "config/ssh_bk",
+        ])
 
         self.key_type = QComboBox()
         self.key_type.addItems(["RSA", "Ed25519"])
@@ -64,7 +68,7 @@ class SSH(BaseEditor):
         layout = QFormLayout(self)
         # === Identity / Channel ===
         layout.addRow("Label", self.label)
-        layout.addRow("Default Channel", self.default_channel)
+        layout.addRow("Channel", self.default_channel)
 
         # === SSH Connection ===
         layout.addRow("Host", self.host)
@@ -103,7 +107,7 @@ class SSH(BaseEditor):
         layout.addRow(self.generate_btn)
         layout.addRow("Public Key", self.public_key)
 
-        # === Serial + Test ===
+        layout.addRow("Directive Path", self.path_selector) #this is path in the json node where to put this
         layout.addRow("Serial", self.serial)
         self.test_btn = QPushButton("🔌 Test Connection")
         self.test_btn.clicked.connect(self._test_connection)
@@ -124,11 +128,6 @@ class SSH(BaseEditor):
         self.password.setVisible(mode == "password")
         self.private_key.setVisible(mode == "private_key")
         self.passphrase.setVisible(mode == "private_key")
-
-    def get_directory_path(self):
-        if self.label.text().lower().strip() == "ssh_bk":
-            return ["config", "ssh_bk"]
-        return ["config","ssh"]
 
     def deploy_fields(self):
         out = {
@@ -160,6 +159,9 @@ class SSH(BaseEditor):
     # --------------------------
     def on_load(self, data):
 
+        path = data.get("node_directive_path", "config/ssh")
+        self.path_selector.setCurrentText(path)
+
         self.serial.setText(data.get("serial", ""))
         self.label.setText(data.get("label", ""))
 
@@ -185,6 +187,7 @@ class SSH(BaseEditor):
         self._ensure_serial()
 
         out = {
+            "node_directive_path": self.path_selector.currentText().strip(),
             "serial": self.serial.text().strip(),
             "label": self.label.text().strip(),
             "channel": self.default_channel.currentText(),

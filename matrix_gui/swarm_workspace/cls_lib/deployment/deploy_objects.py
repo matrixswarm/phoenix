@@ -35,8 +35,6 @@ class DualBuilder:
     def set_root_directive(self, root):
         self.directive["agents"] = root
 
-
-
 class DeploymentSession:
     def __init__(self, ws, tree, root_uid, resolver):
         """
@@ -80,17 +78,14 @@ class DeploymentSession:
             # Build IR map
             ir_map = {}
             for gid, node in self.tree.items():
-                rdict = {}
-                rc = resolved_constraints.get(gid, {})
-                for gid, node in self.tree.items():
-                    rdict = resolved_constraints.get(gid, {})  # already a dict of Constraint objs
-                    node['serial'] = str(hashlib.sha256(f"{uuid.uuid4()}-{time.time()}".encode()).hexdigest())
-                    ir_map[gid] = AgentIR(
-                        gid=gid,
-                        node=node,
-                        resolved_dict=rdict,
-                        children=node.get("children", []),
-                    )
+                rdict = resolved_constraints.get(gid, {})  # already a dict of Constraint objs
+                node['serial'] = str(hashlib.sha256(f"{uuid.uuid4()}-{time.time()}".encode()).hexdigest())
+                ir_map[gid] = AgentIR(
+                    gid=gid,
+                    node=node,
+                    resolved_dict=rdict,
+                    children=node.get("children", []),
+                )
 
             # Compile deploy + directive
             deploy_compiler = DeploymentCompiler(ir_map, root_gid)

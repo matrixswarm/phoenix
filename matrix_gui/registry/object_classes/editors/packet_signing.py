@@ -1,4 +1,5 @@
 from .base_editor import BaseEditor
+from PyQt6.QtWidgets import QComboBox
 from matrix_gui.modules.vault.crypto.cert_factory import _generate_keypair
 
 class PacketSigning(BaseEditor):
@@ -6,6 +7,14 @@ class PacketSigning(BaseEditor):
 
     def __init__(self, parent=None, new_conn=False, default_channel_options=None):
         super().__init__(parent, new_conn)
+
+        self.path_selector = QComboBox()
+        #node directive path - add as you see fit
+        self.path_selector.addItems([
+            "config/security/signing", #default
+            #"config/security/signing2",
+        ])
+
         priv, pub, _ = _generate_keypair()
         remote_priv, remote_pub, _ = _generate_keypair()
         self.bundle = {
@@ -15,13 +24,8 @@ class PacketSigning(BaseEditor):
             "remote_privkey": remote_priv
         }
 
-
-    def get_directory_path(self):
-        return ["config", "security", "signing"]
-
     def get_deployment_path(self, universal_id):
         return ["certs", universal_id, "signing"]
-
 
     def on_load(self, data: dict):
         pass

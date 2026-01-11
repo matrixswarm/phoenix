@@ -5,12 +5,6 @@ import datetime
 from pathlib import Path
 import inspect
 import copy
-import importlib
-from multiprocessing import Process, Pipe
-
-import matrix_gui.core.panel.scraper.scraper_process as sproc
-importlib.reload(sproc)
-from matrix_gui.core.panel.scraper.scraper_process import scraper_entry
 from PyQt6.QtGui import QIcon
 from PyQt6.QtCore import Qt, QSize, QTimer
 from PyQt6.QtWidgets import (
@@ -34,8 +28,11 @@ from matrix_gui.core.panel.restart_agent_panel import RestartAgentPanel
 from matrix_gui.core.panel.replace_agent_panel import ReplaceAgentPanel
 from matrix_gui.core.panel.hotswap_agent_panel import HotswapAgentPanel
 from matrix_gui.core.panel.inject_agent_panel import InjectAgentPanel
+from matrix_gui.core.panel.multiplexer_panel import MultiplexerPanel
 from matrix_gui.core.panel.control_bar import ControlBar
 from matrix_gui.modules.vault.services.vault_connection_singleton import VaultConnectionSingleton
+from matrix_gui.core.class_lib.packet_delivery.packet.standard.command.packet import Packet
+
 
 def run_session(session_id, conn):
     """
@@ -81,15 +78,30 @@ def run_session(session_id, conn):
 
         # --- Preflight validation: require ingress + egress ---
         try:
-            agents = [a.get("name", "").lower() for a in deployment.get("agents", [])]
+            agents = deployment.get("agents", [])
             missing = []
-            if "matrix_https" not in agents:
-                missing.append("matrix_https (ingress)")
-            if "matrix_websocket" not in agents:
+
+            # Search for channels and update as needed
+            i=0
+            for agent in agents:
+                # do we have any agents acting as channels for "outgoing.command"
+                if agent.get("connection", {}).get("channel","") == "outgoing.command":
+                    i=i+1
+                    break
+
+            #payload recieve will be updated; right now, just use websocket
+
+
+            if not i:
+                missing.append("need at least one agent with egress capability")
+
+            # Validate the presence of required agents (after updating)
+            agent_names = [a.get("name", "").lower() for a in agents]
+            if "matrix_websocket" not in agent_names:
                 missing.append("matrix_websocket (egress)")
 
             if missing:
-                from PyQt6.QtWidgets import QMessageBox
+
                 msg_text = (
                     "Phoenix requires at least one ingress and one egress agent to connect.\n\n"
                     "Missing:\n - " + "\n - ".join(missing) +
@@ -108,9 +120,9 @@ def run_session(session_id, conn):
         except Exception as e:
             print(f"[SESSION][WARN] Preflight check failed: {e}")
 
-        ctx = _connect_single(deployment, deployment.get("id"))
+        ctx = _connect_single(deployment, session_id, deployment.get("id"))
         inbound = InboundDispatcher(ctx.bus)
-        outbound = OutboundDispatcher(ctx.bus, get_sessions(), deployment)
+        outbound = OutboundDispatcher(ctx.bus, session_id)
         ctx.inbound, ctx.outbound = inbound, outbound
 
         print(f"[DEBUG] Bus ID for session {session_id}: {id(ctx.bus)}")
@@ -161,27 +173,26 @@ class SessionWindow(QMainWindow):
         super().__init__()
         try:
 
-
             self.deployment_id=deployment_id
             self.deployment = deployment
+            #heartbeat timer
             self._hb_timer = QTimer(self)
             self._hb_timer.timeout.connect(self._send_heartbeat)
             self._hb_timer.start(2000)  # every 2 seconds
+
+            #showing status bar
+            self._blink_in_progress = False
 
             self.conn = conn
             self.session_id = session_id
             self.vault_singleton = VaultConnectionSingleton.get(dep_id=deployment_id, conn=conn)
             self.vault_singleton.load(deployment)
 
-            #scraper process
-            self.scraper_proc = None
-            self.scraper_conn = None
-
             self.cockpit_id = cockpit_id
             self.deployment = deployment
             self.bus = bus
-            self.inbound = inbound
-            self.outbound = outbound
+            self.inbound_dispatcher = inbound
+            self.outbound_dispatcher = outbound
             self.ctx = ctx
             self._panel_cache = {}
 
@@ -207,8 +218,8 @@ class SessionWindow(QMainWindow):
             self.console_wrapper.setObjectName("logs")
 
             # Status bar
-            self.status_label = QLabel("Status: Initializing...")
-            self._setup_status_bar()
+            self.status_label = QLabel("")  # keep object but empty & hidden
+            self.status_label.hide()
 
             # Window Icon
             logo_path = "matrix_gui/theme/panel_logo.png"
@@ -232,6 +243,40 @@ class SessionWindow(QMainWindow):
             self.setIconSize(QSize(24, 24))
             self.setMinimumHeight(36)
 
+            self._setup_status_bar()
+
+            #multiplexor setup
+            self.outgoing_connectors = {}
+            default_found = False
+            for a in deployment.get("agents", []):
+                ch = a.get("connection", {}).get("channel")
+                if ch == "outgoing.command":
+                    uid = a.get("universal_id")
+                    self.outgoing_connectors[uid] = a
+
+                    # if this one is marked default, assign it as the active connector
+                    if a.get("connection", {}).get("default_outgoing"):
+                        self.outbound_dispatcher.set_outbound_connector(a)
+                        self.outgoing_badge.setText(f"Outgoing: {uid}  ⚪")
+                        default_found = True
+
+            # fallback: if no default marked, just pick the first one
+            if not default_found and self.outgoing_connectors:
+                first_uid, first_agent = next(iter(self.outgoing_connectors.items()))
+                self.outbound_dispatcher.set_outbound_connector(first_agent)
+                self.outgoing_badge.setText(f"Outgoing: {first_uid}  ⚪")
+
+            try:
+                for a in deployment.get("agents", []):
+                    if a.get("name", "").lower() == "matrix_websocket":
+                        uid = a.get("universal_id")
+                        self.incoming_badge.setText(f"Incoming: {uid}  ⚪")
+                        break
+
+
+            except Exception as e:
+                print("[INIT_BADGES_ERROR]", e)
+
             self.log_view.line_count_changed.connect(self._on_log_count_changed)
 
             #session window title
@@ -239,13 +284,12 @@ class SessionWindow(QMainWindow):
             self.setWindowTitle(f"Matrix | deployment: {label} | session-id: {self.session_id}")
 
             # Events
+            self.bus.on("channel.packet.sent", self._handle_packet_sent)
             self.bus.on(f"inbound.verified.swarm_feed.alert", self._handle_swarm_alert)
             self.bus.on("channel.status", self._handle_channel_status)
             self.bus.on(f"inbound.verified.agent_log_view.update", self._handle_log_update)
             self.bus.on("gui.agent.selected", self._handle_agent_selected)
             self.bus.on("gui.log.token.updated", self._set_active_log_token)
-            #self.bus.on("scraper.run.requested", self._handle_scraper_request)
-
 
         except Exception as e:
             emit_gui_exception_log("session_window.__init__", e)
@@ -266,36 +310,9 @@ class SessionWindow(QMainWindow):
                     print(f"[SESSION] 🧨 Received external close for {self.session_id}")
                     self._handle_external_close()
 
-            # 2) ALWAYS check scraper pipe (even if Phoenix pipe is empty)
-            if self.scraper_conn and self.scraper_conn.poll():
-                s_msg = self.scraper_conn.recv()
-                m_type = s_msg.get("type")
-
-                if m_type == "scrape_results":
-                    self.bus.emit(
-                        "scrape.completed",
-                        data=s_msg.get("data"),
-                        session_id=self.session_id
-                    )
-
-                elif m_type == "scrape_error":
-                    self.bus.emit(
-                        "scrape.failed",
-                        error=s_msg.get("error"),
-                        session_id=self.session_id
-                    )
-
-                elif m_type == "scrape_log":
-                    self.bus.emit(
-                        "scrape.log",
-                        line=s_msg.get("line"),
-                        session_id=self.session_id
-                    )
-
         except (EOFError, OSError):
             print(f"[SESSION][PIPE] Lost pipe for {self.session_id}")
             self._pipe_timer.stop()
-
 
     def _send_heartbeat(self):
         try:
@@ -317,16 +334,68 @@ class SessionWindow(QMainWindow):
 
     def _handle_channel_status(self, session_id, channel, status, info=None, **_):
         try:
-            msg = f"{channel}: {status}"
-            self.status_label.setText(f"Status: {msg}")
+
+            dot = self._status_to_dot(status)
+
+            if "websocket" in channel:
+                self.incoming_badge.setText(f"Incoming: {channel}  {dot}")
+
+            #preferred = self.outbound.preferred_channel
+            #if preferred and preferred.lower() in channel.lower():
+            #    self.outgoing_badge.setText(f"Outgoing: {channel}  {dot}")
+
         except Exception as e:
             emit_gui_exception_log("session_window._handle_channel_status", e)
+
+    def _handle_packet_sent(self, start_end=1):
+        """
+        start_end = 1 → flash (sending)
+        start_end = 0 → revert (done)
+        """
+        try:
+            # determine symbol
+            dot = "🟢" if start_end else "⚪"
+
+            # parse current text
+            text = self.outgoing_badge.text().strip()
+
+            # Force rebuild instead of partial replace — some Qt themes cache identical strings
+            if "Outgoing:" in text:
+                # Grab everything before the last emoji or fallback to plain base
+                base = text.split("⚪")[0].split("🟢")[0].split("🟡")[0].split("🔴")[0].strip()
+                new_text = f"{base} {dot}"
+            else:
+                new_text = f"Outgoing: — {dot}"
+
+            # Force repaint by setting text and updating the widget
+            self.outgoing_badge.setText(new_text)
+            self.outgoing_badge.repaint()
+            QApplication.processEvents()  # push immediate paint to UI thread
+
+            # auto-revert to ⚪ after a short delay if we just flashed green
+            if start_end == 1:
+                QTimer.singleShot(400, lambda: self._handle_packet_sent(0))
+
+        except Exception as e:
+            print(f"[BLINK][ERROR] packet.sent handler: {e}")
+
+    def _reset_outgoing_badge(self, style):
+        self.outgoing_badge.setStyleSheet(style)
+        self._blink_in_progress = False
+
+    def _status_to_dot(self, status):
+        return {
+            "connected": "🟢",
+            "ready": "🟢",
+            "connecting": "🟡",
+            "disconnected": "🔴",
+            "idle": "⚪"
+        }.get(status, "⚪")
 
     # --- Builders ---
     def _build_tree_panel(self):
         try:
             box = QGroupBox("🦉 Agent Tree")
-
             layout = QVBoxLayout()
             layout.setContentsMargins(6, 4, 6, 4)  # (L, T, R, B)
             layout.setSpacing(4)
@@ -381,14 +450,11 @@ class SessionWindow(QMainWindow):
             emit_gui_exception_log("SessionWindow._handle_agent_selected", e)
             return None
 
-
-
     def _load_custom_panel(self, panel_name, node):
 
         try:
 
             cache_key = panel_name
-
             if cache_key in self._panel_cache:
                 return self._panel_cache[cache_key]
 
@@ -490,8 +556,6 @@ class SessionWindow(QMainWindow):
         except Exception as e:
             emit_gui_exception_log("session_window._build_log_panel", e)
 
-
-
     def _setup_main_layout(self, main_layout):
         try:
             right_column = QVBoxLayout()
@@ -513,14 +577,12 @@ class SessionWindow(QMainWindow):
         except Exception as e:
             emit_gui_exception_log("session_window._setup_main_layout", e)
 
-  
     # --- Log Update ---
     def _handle_log_update(self, session_id, channel, source, payload, **_):
         try:
             content = payload.get("content", {})
             token = content.get("token")
             lines = content.get("lines", [])
-
 
             if not lines:
                 return
@@ -616,6 +678,25 @@ class SessionWindow(QMainWindow):
         except Exception as e:
             emit_gui_exception_log("session_window._launch_replace_agent_source", e)
 
+    def _launch_multiplexer(self):
+        try:
+            if not hasattr(self, "_multiplexer_dialog") or not isinstance(self._multiplexer_dialog, MultiplexerPanel):
+                self._multiplexer_dialog = MultiplexerPanel(
+                    session_id=self.session_id,
+                    bus=self.bus,
+                    node=None,
+                    session_window=self,
+                )
+
+            self._multiplexer_dialog.sync_with_current_connector()
+
+            self._multiplexer_dialog.show()
+            self._multiplexer_dialog.raise_()
+            self._multiplexer_dialog.activateWindow()
+
+        except Exception as e:
+            emit_gui_exception_log("session_window._launch_multiplexer", e)
+
     def _launch_hotswap_agent_modal(self, uid: str = None):
         try:
 
@@ -675,7 +756,6 @@ class SessionWindow(QMainWindow):
                 return
 
             # === PROCEED WITH REBOOT ===
-            from matrix_gui.core.class_lib.packet_delivery.packet.standard.command.packet import Packet
             pk = Packet()
             pk.set_data({
                 "handler": "cmd_matrix_reloaded"
@@ -729,19 +809,26 @@ class SessionWindow(QMainWindow):
     # --- Other unchanged methods ---
     def _send_cmd(self, cmd): pass
 
-
     def _setup_status_bar(self):
         try:
             status_bar = QToolBar("Session Status", self)
             status_bar.setMovable(False)
 
-            # Primary status label (already exists)
+            # Primary status label
             status_bar.addWidget(self.status_label)
 
-            # Add session ID label to the right
+            # --- NEW BADGES ---
+            self.incoming_badge = QLabel("Incoming: —")
+            self.incoming_badge.setStyleSheet("padding-left: 12px; color: #8f8f8f;")
+            status_bar.addWidget(self.incoming_badge)
+
+            self.outgoing_badge = QLabel("Outgoing: —")
+            self.outgoing_badge.setStyleSheet("padding-left: 12px; color: #8f8f8f;")
+            status_bar.addWidget(self.outgoing_badge)
+
+            # session ID shown at far right
             self.session_id_label = QLabel(f"🆔 {self.session_id}")
             self.session_id_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-            self.session_id_label.setStyleSheet("padding-left: 12px; color: gray;")
             status_bar.addWidget(self.session_id_label)
 
             self.addToolBar(Qt.ToolBarArea.BottomToolBarArea, status_bar)
@@ -758,45 +845,6 @@ class SessionWindow(QMainWindow):
         except Exception as e:
             emit_gui_exception_log("SessionWindow._handle_swarm_alert", e)
 
-    def _handle_scraper_request(self, session_id, sources, filters, keepalive, **_):
-
-        try:
-            # Kill old scraper if running
-            if self.scraper_proc:
-                try:
-                    self.scraper_conn.send({"type": "exit"})
-                except Exception as e:
-                    pass
-
-                try:
-                    self.scraper_proc.terminate()
-                except Exception as e:
-                    pass
-
-            parent_conn, child_conn = Pipe()
-            self.scraper_conn = parent_conn
-
-            self.scraper_proc = Process(
-                target=scraper_entry,
-                args=(child_conn,),
-                daemon=True
-            )
-
-            self.scraper_proc.start()
-
-            parent_conn.send({
-                "type": "run",
-                "sources": sources,
-                "filters": filters,
-                "keepalive": keepalive
-            })
-
-        except Exception as e:
-            pass
-            import traceback
-            traceback.print_exc()
-
-            self.bus.emit("scrape.failed", session_id=self.session_id, error=str(e))
 
     def _handle_external_close(self):
         """Called when cockpit sends {'type': 'force_close'} over the pipe."""
@@ -813,7 +861,6 @@ class SessionWindow(QMainWindow):
             self.bus.off(f"inbound.verified.agent_log_view.update", self._handle_log_update)
             self.bus.off("gui.agent.selected", self._handle_agent_selected)
             self.bus.off("gui.log.token.updated", self._set_active_log_token)
-            #self.bus.off("scraper.run.requested", self._handle_scraper_request)
 
 
             for panel in self._panel_cache.values():
@@ -825,13 +872,6 @@ class SessionWindow(QMainWindow):
                     print(f"[SESSION][CLEANUP] Failed to delete panel: {e}")
 
             self._panel_cache.clear()
-
-            if self.scraper_proc and self.scraper_proc.is_alive():
-                try:
-                    self.scraper_conn.send({"type": "exit"})
-                except:
-                    pass
-                self.scraper_proc.terminate()
 
         except Exception as e:
             emit_gui_exception_log("SessionWindow.closeEvent.destroy_session", e)

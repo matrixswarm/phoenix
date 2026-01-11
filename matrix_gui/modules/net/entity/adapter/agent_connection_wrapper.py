@@ -5,9 +5,7 @@ class AgentConnectionWrapper:
         self.uid = agent.get('universal_id')
 
     def _get_connection(self) -> dict:
-        return (self.agent.get('connection_snapshot')
-                or self.agent.get('connection')
-                or {})
+        return (self.agent.get('connection')or {})
 
     def get_universal_id(self) -> str:
         return self.uid

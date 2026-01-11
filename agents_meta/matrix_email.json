@@ -1,0 +1,43 @@
+{
+    "name": "matrix_email",
+    "universal_id": "limbo-email-venue",
+    "constraints": [
+        {
+            "imap": {}
+        },
+        {
+            "smtp": {"inject_in_connection": 1}
+        },
+        {
+            "packet_signing": {
+                "in": true,
+                "out": true
+            }
+        }
+    ],
+
+    "config": {
+        "ui": {
+            "agent_tree": {
+                "emoji": "\ud83d\udce1"
+            },
+            "panel": [
+                "matrix_email.matrix_email"
+            ]
+        }
+    },
+    "service-manager": [
+        {
+            "role": [
+                "matrix_email.status@cmd_list_status"
+            ],
+            "scope": [
+                "parent",
+                "any"
+            ],
+            "priority": {
+                "default": 10
+            }
+        }
+    ]
+}

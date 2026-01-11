@@ -21,6 +21,15 @@ class Imap(BaseEditor):
         self.in_encryption = QComboBox()
         self.in_encryption.addItems(["SSL", "STARTTLS", "TLS", "None"])
 
+        self.path_selector = QComboBox()
+        #node directive path - add as you see fit
+        self.path_selector.addItems([
+            "config/imap",  # default
+            #"config/imap_bk",
+            #"config/imap_legacy",
+            #"config/mail"
+        ])
+
         layout = QFormLayout(self)
         layout.addRow("Label", self.label)
         layout.addRow("Server", self.in_server)
@@ -28,14 +37,9 @@ class Imap(BaseEditor):
         layout.addRow("Username", self.in_user)
         layout.addRow("Password", self.in_pass)
         layout.addRow("Encryption", self.in_encryption)
-        layout.addRow("Default Channel", self.default_channel)
+        layout.addRow("Channel", self.default_channel)
+        layout.addRow("Directive Path", self.path_selector) #this is path in the json node where to put this
         layout.addRow("Serial", self.serial)
-
-    # Path override
-    def get_directory_path(self):
-        if self.label.text().lower().strip() == "backup":
-            return ["config", "email_bk"]
-        return ["config","email"]
 
     def deploy_fields(self):
         return {
@@ -48,6 +52,8 @@ class Imap(BaseEditor):
         }
 
     def on_load(self, data):
+        path = data.get("node_directive_path", "config/imap")
+        self.path_selector.setCurrentText(path)
         self.label.setText(data.get("label", ""))
         self.serial.setText(data.get("serial", ""))
         self.in_server.setText(data.get("incoming_server", ""))
@@ -60,6 +66,7 @@ class Imap(BaseEditor):
     def serialize(self):
         self._ensure_serial()
         return {
+            "node_directive_path": self.path_selector.currentText().strip(),
             "serial": self.serial.text().strip(),
             "label": self.label.text().strip(),
             "incoming_server": self.in_server.text().strip(),

@@ -18,6 +18,13 @@ class CDN(BaseEditor):
         self.remote_path = QLineEdit("/public/")
         self.auth_type = QComboBox()
         self.auth_type.addItems(["password", "private_key", "api_key"])
+        self.path_selector = QComboBox()
+        # node directive path - add as you see fit
+        self.path_selector.addItems([
+            "config/cdn",  # default
+            # "config/cdn_bk",
+            # "config/cdn_legacy",
+        ])
 
         self.password = QLineEdit()
         self.password.setEchoMode(QLineEdit.EchoMode.Password)
@@ -109,6 +116,8 @@ class CDN(BaseEditor):
     # ----------------------------------------------------------
     def on_load(self, data):
         """Populate fields from stored CDN connection data."""
+        path = data.get("node_directive_path", "config/imap")
+        self.path_selector.setCurrentText(path)
         self.serial.setText(data.get("serial", ""))
         self.label.setText(data.get("label", ""))
         self.host.setText(str(data.get("host", "")))
@@ -124,14 +133,11 @@ class CDN(BaseEditor):
         self.public_key.setPlainText(str(data.get("public_key", "")))
         self.api_key.setText(str(data.get("api_key", "")))
 
-    def get_directory_path(self):
-        if self.label.text().lower().strip() == "backup":
-            return ["config", "cdn_bk"]
-        return ["config", "cdn"]
     def serialize(self):
         """Return a dictionary suitable for vault storage."""
         self._ensure_serial()
         out = {
+            "node_directive_path": self.path_selector.currentText().strip(),
             "serial": self.serial.text().strip(),
             "label": self.label.text().strip(),
             "host": self.host.text().strip(),

@@ -7,10 +7,11 @@ import uuid
 
 from PyQt6.QtWidgets import (
     QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QTextEdit, QGroupBox, QMessageBox, QWidget,
+    QTextEdit, QGroupBox, QMessageBox, QWidget, QLineEdit,
     QComboBox, QListWidget, QListWidgetItem, QSplitter
 )
 from PyQt6.QtCore import Qt
+from PyQt6.QtWidgets import QCheckBox
 
 from matrix_gui.core.panel.custom_panels.interfaces.base_panel_interface import PhoenixPanelInterface
 from matrix_gui.core.class_lib.packet_delivery.packet.standard.command.packet import Packet
@@ -114,6 +115,22 @@ class TrendScout(PhoenixPanelInterface):
         self.duration_combo.setMaximumWidth(80)
         self.duration_combo.setFixedHeight(24)
         sora_strip_lay.addWidget(self.duration_combo)
+
+        # --- Use Previous Frame Checkbox
+        self.chk_use_prev = QCheckBox("Use prev frame")
+        self.chk_use_prev.setToolTip("If checked, each step after the first will upload the prior frame as Sora's reference image.")
+        self.chk_use_prev.setChecked(False)  # default ON if you want
+        sora_strip_lay.addWidget(self.chk_use_prev)
+
+        # --- Still Image URL (optional)
+        self.input_ref_label = QLabel("Ref Img URL:")
+        self.input_ref_label.setToolTip("Optional: A still image to use as Sora's reference for STEP 1.")
+        sora_strip_lay.addWidget(self.input_ref_label)
+
+        self.input_ref_edit = QLineEdit()
+        self.input_ref_edit.setPlaceholderText("https://example.com/my_image.png")
+        self.input_ref_edit.setFixedWidth(260)
+        sora_strip_lay.addWidget(self.input_ref_edit)
 
         # --- Fire Button
         self.btn_fire = QPushButton("🔥 Fire!")
@@ -316,7 +333,9 @@ class TrendScout(PhoenixPanelInterface):
             "curated_batch": curated_items,
             "model": model,
             "resolution": resolution,
-            "duration_sec": duration_sec
+            "duration_sec": duration_sec,
+            "use_prev_frame": int(self.chk_use_prev.isChecked()),
+            "input_reference_url": self.input_ref_edit.text().strip()
         })
 
         # Clear curated list and editor after firing
@@ -338,17 +357,6 @@ class TrendScout(PhoenixPanelInterface):
 
             status = content.get("status", "ok")
             action = content.get("action", "unknown")
-
-            msg = content.get("message") or ""
-            if msg:
-                self.output_box.append(f"✔ {action}: {msg}")
-            else:
-                self.output_box.append(f"✔ {action} (status={status})")
-
-            if action == "generate_ideas":
-                self.current_batch_id = content.get("batch_id")
-                ideas = content.get("ideas") or []
-                self._render_ideas(ideas)
 
             # fire doesn't need special UI, just log the message
             # no mode/timer/curate_list handling in lite mode

@@ -7,10 +7,15 @@ class Telegram(BaseEditor):
     def __init__(self, parent=None, new_conn=False, default_channel_options=None):
         super().__init__(parent, new_conn)
 
-
         self.default_channel = QComboBox()
         default_channel_options = default_channel_options or ["telegram", "outgoing.command"]
         self.default_channel.addItems(default_channel_options)
+
+        self.path_selector = QComboBox()
+        #node directive path - add as you see fit
+        self.path_selector.addItems([
+            "config/telegram",
+        ])
 
         self.label = QLineEdit(self.generate_default_label())
         self.chat_id = QLineEdit()
@@ -23,11 +28,13 @@ class Telegram(BaseEditor):
         layout.addRow("Chat ID", self.chat_id)
         layout.addRow("Bot Token", self.bot_token)
         layout.addRow("Note", self.note)
-        layout.addRow("Default Channel", self.default_channel)
+        layout.addRow("Channel", self.default_channel)
+        layout.addRow("Directive Path", self.path_selector)  # this is path in the json node where to put this
         layout.addRow("Serial", self.serial)
 
-
     def on_load(self, data):
+        path = data.get("node_directive_path", "config/telegram")
+        self.path_selector.setCurrentText(path)
         self.label.setText(data.get("label", ""))
         self.chat_id.setText(str(data.get("chat_id", "")))
         self.bot_token.setText(str(data.get("bot_token", "")))
@@ -44,6 +51,7 @@ class Telegram(BaseEditor):
 
     def serialize(self):
         return {
+            "node_directive_path": self.path_selector.currentText().strip(),
             "label": self.label.text().strip(),
             "chat_id": self.chat_id.text().strip(),
             "bot_token": self.bot_token.text().strip(),
@@ -61,5 +69,5 @@ class Telegram(BaseEditor):
         if not self.serial.text().strip():
             return False, "Serial is required."
         if self.default_channel.currentText().strip() == "":
-            return False, "Default channel is required."
+            return False, "Channel is required."
         return True, ""

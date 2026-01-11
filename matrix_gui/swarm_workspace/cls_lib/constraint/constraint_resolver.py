@@ -2,7 +2,6 @@
 # ---------------------------------------------------------
 # Constraint Row Widget
 # ---------------------------------------------------------
-from pathlib import Path
 from matrix_gui.modules.vault.services.vault_core_singleton import VaultCoreSingleton
 from matrix_gui.registry.object_classes import EDITOR_REGISTRY, PROVIDER_REGISTRY
 from .registry_constraint_handler import RegistryConstraintHandler

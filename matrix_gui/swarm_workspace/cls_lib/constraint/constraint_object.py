@@ -6,7 +6,6 @@ class Constraint:
     Live representation of a constraint instance during deploy/compile.
     Carries its handler/editor, fields, and behaviour.
     """
-
     def __init__(self, cls_name, handler, meta, agent=None):
         self.cls_name = cls_name              # e.g. 'packet_signing'
         self.handler = handler                # editor/autogen handler
@@ -15,12 +14,21 @@ class Constraint:
         self.is_autogen = self.meta.get("auto", False)
         self.required = self.meta.get("required", True)
         self.serial = self.meta.get("serial")
+        self.inject_in_connection = self.meta.get("raw", {}).get("inject_in_connection", False)
         self.path = []
         self.fields = {}
 
     # --------------------------------------------------------
     # Behavioural helpers
     # --------------------------------------------------------
+    def get_constraint_name(self):
+        return self.cls_name
+    def get_fields(self):
+        return self.fields
+    def get_meta(self):
+        return self.meta
+    def inject_into_connection(self):
+        return bool(self.inject_in_connection)
 
     def resolve(self):
         if self.is_autogen:
@@ -38,6 +46,7 @@ class Constraint:
         # HARD GUARANTEE: path is ALWAYS a list[str]
         if isinstance(self.path, str):
             self.path = [p for p in self.path.split("/") if p]
+
         elif not isinstance(self.path, list):
             self.path = []
 
@@ -46,6 +55,9 @@ class Constraint:
             self.path = self.path[1:]
 
         return self
+
+    def get_editor(self):
+        return self.handler
 
     def validate(self):
         """Raise if a required manual constraint is missing serial."""
@@ -62,7 +74,6 @@ class Constraint:
     # --------------------------------------------------------
     # Data access helpers
     # --------------------------------------------------------
-
     def get_field(self, key, default=None):
         """Access a field from deploy/autogen data."""
         return self.fields.get(key, default)

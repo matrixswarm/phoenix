@@ -1,4 +1,5 @@
 from .base_editor import BaseEditor
+from PyQt6.QtWidgets import QComboBox
 from matrix_gui.modules.vault.crypto.cert_factory import (
     _generate_root_ca, _generate_signed_cert, spki_pin_from_pem
 )
@@ -11,6 +12,16 @@ class ConnectionCert(BaseEditor):
 
         self._is_valid = False
         try:
+
+            self.path_selector = QComboBox()
+            # node directive path - add as you see fit
+            self.path_selector.addItems([
+                "config/security/connection",  # default
+                # "config/imap_bk",
+                # "config/imap_legacy",
+                # "config/mail"
+            ])
+
             tag = self.__class__.__name__.lower()
             ca_cert_pem, ca_key_pem, ca_key_obj = _generate_root_ca(f"{tag}_ca")
             issuer_cert = x509.load_pem_x509_certificate(ca_cert_pem.encode())
@@ -29,9 +40,6 @@ class ConnectionCert(BaseEditor):
 
     def on_load(self, data: dict):
         pass
-
-    def get_directory_path(self):
-        return ["config", "security", "connection"]
 
     def get_deployment_path(self, universal_id):
         return ["certs", universal_id, "connection_cert"]

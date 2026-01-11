@@ -13,6 +13,15 @@ class OpenAI(BaseEditor):
         default_channel_options = default_channel_options or ["oracle"]
         self.default_channel.addItems(default_channel_options)
 
+        self.path_selector = QComboBox()
+        #node directive path - add as you see fit
+        self.path_selector.addItems([
+            "config/openai",  # default
+            #"config/imap_bk",
+            #"config/imap_legacy",
+            #"config/mail"
+        ])
+
         self.api_key = QLineEdit()
         self.api_key.setEchoMode(QLineEdit.EchoMode.Password)
         self.note = QLineEdit()
@@ -21,7 +30,8 @@ class OpenAI(BaseEditor):
         layout.addRow("Label", self.label)
         layout.addRow("API Key", self.api_key)
         layout.addRow("Note", self.note)
-        layout.addRow("Default Channel", self.default_channel)
+        layout.addRow("Channel", self.default_channel)
+        layout.addRow("Directive Path", self.path_selector)  #  this is json node path where the agent's config is written
         layout.addRow("Serial", self.serial)
 
     def deploy_fields(self):
@@ -31,6 +41,8 @@ class OpenAI(BaseEditor):
         }
 
     def on_load(self, data):
+        path = data.get("node_directive_path", "config/openai")
+        self.path_selector.setCurrentText(path)
         self.label.setText(data.get("label", ""))
         self.api_key.setText(data.get("api_key", ""))
         self.note.setText(data.get("note", ""))
@@ -39,6 +51,7 @@ class OpenAI(BaseEditor):
 
     def serialize(self):
         return {
+            "node_directive_path": self.path_selector.currentText().strip(),
             "label": self.label.text().strip(),
             "api_key": self.api_key.text().strip(),
             "note": self.note.text().strip(),
@@ -53,6 +66,6 @@ class OpenAI(BaseEditor):
             return False, "Serial is required."
 
         if self.default_channel.currentText().strip() == "":
-            return False, "Default channel is required."
+            return False, "Channel is required."
 
         return True, ""

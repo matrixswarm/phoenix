@@ -12,6 +12,14 @@ class Discord(BaseEditor):
         default_channel_options = default_channel_options or ["alerts"]
         self.default_channel.addItems(default_channel_options)
 
+        self.path_selector = QComboBox()
+        # node directive path - add as you see fit
+        self.path_selector.addItems([
+            "config/discord",  # default
+            # "config/discord_bk",
+            # "config/discord_legacy",
+        ])
+
         self.channel_id = QLineEdit()
         self.bot_token = QLineEdit()
         self.bot_token.setEchoMode(QLineEdit.EchoMode.Password)
@@ -22,16 +30,13 @@ class Discord(BaseEditor):
         layout.addRow("Channel ID", self.channel_id)
         layout.addRow("Bot Token", self.bot_token)
         layout.addRow("Note", self.note)
-        layout.addRow("Default Channel", self.default_channel)
+        layout.addRow("Channel", self.default_channel)
+        layout.addRow("Directive Path", self.path_selector)  #  this is json node path where the agent's config is written
         layout.addRow("Serial", self.serial)
 
-    # Path override
-    def get_directory_path(self):
-        if self.label.text().lower().strip() == "backup":
-            return ["config", "discord_bk"]
-        return ["config"]
-
     def on_load(self, data):
+        path = data.get("node_directive_path", "config/discord")
+        self.path_selector.setCurrentText(path)
         self.label.setText(data.get("label", ""))
         self.channel_id.setText(str(data.get("channel_id", "")))
         self.bot_token.setText(data.get("bot_token", ""))
@@ -48,6 +53,7 @@ class Discord(BaseEditor):
 
     def serialize(self):
         return {
+            "node_directive_path": self.path_selector.currentText().strip(),
             "label": self.label.text().strip(),
             "channel_id": self.channel_id.text().strip(),
             "bot_token": self.bot_token.text().strip(),
@@ -64,5 +70,5 @@ class Discord(BaseEditor):
         if not self.serial.text().strip():
             return False, "Serial is required."
         if self.default_channel.currentText().strip() == "":
-            return False, "Default channel is required."
+            return False, "Channel is required."
         return True, ""

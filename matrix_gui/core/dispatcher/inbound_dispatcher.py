@@ -1,5 +1,4 @@
 from Crypto.PublicKey import RSA
-from matrix_gui.core.event_bus import EventBus
 from matrix_gui.core.utils.crypto_utils import (
     verify_signed_payload,
     pem_fix,

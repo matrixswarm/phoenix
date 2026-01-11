@@ -218,7 +218,6 @@ class Deploy():
 
         # -------------------------------------------------
 
-
     def _railgun_upload_and_boot(self, parent_dialog, ssh_meta, local_bundle, swarm_key_b64, opts):
         """Upload directive, inject swarm key via env var, stream live deploy output."""
         try:

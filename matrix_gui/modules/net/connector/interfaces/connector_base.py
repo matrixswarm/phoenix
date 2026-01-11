@@ -1,6 +1,5 @@
 from abc import ABC, abstractmethod
 from matrix_gui.core.class_lib.packet_delivery.packet.standard.command.packet import Packet
-
 class BaseConnector(ABC):
     """
     Standard interface for all connectors (HTTPS, WSS, Discord, etc).
@@ -13,6 +12,7 @@ class BaseConnector(ABC):
         self.deployment = deployment
         self._status = "disconnected"
         self._channel_name = None
+        self._mission=None
 
     @abstractmethod
     def send(self, packet:Packet, timeout=10):

@@ -320,8 +320,7 @@ class EmailSend(PhoenixPanelInterface):
                 }
             })
 
-            self.bus.emit("outbound.message", session_id=self.session_id,
-                          channel="outgoing.command", packet=pk)
+            self.bus.emit("outbound.message", session_id=self.session_id, channel="outgoing.command", packet=pk)
 
             QMessageBox.information(self, "Email Sent", "Email sent to agent for delivery.")
 

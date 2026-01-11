@@ -91,23 +91,36 @@ class WSSConnector(BaseConnector):
         self._socket_map = {}  # sid → ws
         ConnectorBus.get("global").on("session.closed", self._on_session_closed)
 
-    def __call__(self, host, port, agent, deployment, session_id, timeout=10):
+    def __call__(self, agent, deployment, session_id, timeout=10):
+
         name = f"{agent.get('universal_id')}-wss"
         if self._running.get(session_id):
             print(f"[WSSConnector] session {session_id} already running")
             return
+
         self._running[session_id] = True
         t = threading.Thread(
             target=self._connector_loop,
-            args=(host, port, agent, deployment, session_id, name),
+            args=(agent, deployment, session_id, name),
             daemon=True,
             name=name,
         )
         t.start()
 
-    def _connector_loop(self, host, port, agent, deployment, sid, ch_name):
+    def _connector_loop(self, agent, deployment, sid, ch_name):
         ctx = get_sessions().get(sid)
         if not ctx:
+            return
+
+        conn = agent.get("connection", {})
+        if not conn:
+            print(f"[WSSConnector][_connector_loop] no connection dict provided")
+            return
+
+        port = conn.get("port",False)
+        host = conn.get("host", False)
+        if not port or not host:
+            print(f"[WSSConnector][_connector_loop] host and port not provided")
             return
 
         backoff = 2

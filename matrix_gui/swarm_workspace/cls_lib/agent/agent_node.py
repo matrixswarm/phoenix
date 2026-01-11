@@ -78,7 +78,7 @@ class AgentNode:
                 "serial": None,
                 "auto": is_auto,
                 "met": is_auto,
-                "required": True
+                "required": True,
             })
 
     def get_node(self):

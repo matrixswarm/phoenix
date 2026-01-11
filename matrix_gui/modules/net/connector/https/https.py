@@ -19,6 +19,7 @@ class HTTPSConnector(BaseConnector):
 
     def __init__(self):
         super().__init__(None, None, None)
+        self.proto = "https"
         self.host = None
         self.port = None
         self.agent = None
@@ -26,16 +27,28 @@ class HTTPSConnector(BaseConnector):
         self.session_id = None
         self._running = {}
 
-    def __call__(self, host, port, agent, deployment, session_id, timeout=10):
+    def __call__(self, agent, deployment, session_id, timeout=10):
+
         print(f"[HTTPSConnector] Registered for session {session_id}")
-        ctx = get_sessions().get(session_id)
-        if not ctx:
+        self.ctx = get_sessions().get(session_id)
+        if not self.ctx:
             print(f"[HTTPSConnector][{agent.get('universal_id')}] ❌ No SessionContext found for {session_id}")
             return
 
-        channel_name = f"{agent['universal_id']}-{session_id[:8]}-{uuid.uuid4().hex[:6]}-https"
-        ctx.channels[channel_name] = self
-        ctx.status[channel_name] = "ready"
+        conn = agent.get("connection", {})
+        if not conn:
+            print(f"[HTTPSConnector][__call__] no connection dict provided")
+            return
+
+        port = conn.get("port", False)
+        host = conn.get("host", False)
+        if not port or not host:
+            print(f"[HTTPSConnector][__call__] host and port not provided")
+            return
+
+        channel_name = f"https-{session_id[:6]}-{uuid.uuid4().hex[:6]}"
+        self.ctx.channels[channel_name] = self
+        self.ctx.status[channel_name] = "ready"
 
         # Stash connection details so send() knows where to shoot
         self.host = host
@@ -53,6 +66,9 @@ class HTTPSConnector(BaseConnector):
         uid = self.agent.get("universal_id") if self.agent else "unknown"
         print(f"[HTTPSConnector][{uid}] 🎯 Attempting send → {self.host}:{self.port}")
         try:
+
+            if self.ctx and hasattr(self.ctx, "bus"):
+                self.ctx.bus.emit("channel.packet.sent", start_end=1)
 
             inner={}
             self._set_status("connecting")
@@ -106,6 +122,7 @@ class HTTPSConnector(BaseConnector):
             https_conn.sock = tls_sock
 
             # Verify SPKI pin
+            actual_pin=None
             try:
                 peer_cert = tls_sock.getpeercert(binary_form=True)
                 ok, actual_pin = verify_spki_pin(peer_cert, expected_pin)
@@ -141,6 +158,10 @@ class HTTPSConnector(BaseConnector):
         except Exception as e:
 
             print(f"[HTTPSConnector][{uid}] ❌ Send error to {self.host}:{self.port} → {e}")
+
+        finally:
+            if self.ctx and hasattr(self.ctx, "bus"):
+                self.ctx.bus.emit("channel.packet.sent", start_end=0)
 
         self._set_status("disconnected")
 

@@ -14,6 +14,14 @@ class MYSQL(BaseEditor):
         default_channel_options = default_channel_options or ["mysql"]
         self.default_channel.addItems(default_channel_options)
 
+        self.path_selector = QComboBox()
+        # node directive path - add as you see fit
+        self.path_selector.addItems([
+            "config/mysql",  # default
+            # "config/mysql_bk",
+        ])
+
+
         # MySQL core fields
         self.host = QLineEdit()
         self.port = QLineEdit()
@@ -29,7 +37,8 @@ class MYSQL(BaseEditor):
         layout.addRow("Username", self.username)
         layout.addRow("Password", self.password)
         layout.addRow("Database", self.database)
-        layout.addRow("Default Channel", self.default_channel)
+        layout.addRow("Channel", self.default_channel)
+        layout.addRow("Directive Path", self.path_selector)  #  this is json node path where the agent's config is written
         layout.addRow("Serial", self.serial)
 
     def get_directory_path(self):
@@ -47,6 +56,8 @@ class MYSQL(BaseEditor):
         }
 
     def on_load(self, data):
+        path = data.get("node_directive_path", "config/mysql")
+        self.path_selector.setCurrentText(path)
         self.serial.setText(data.get("serial", ""))
 
         self.label.setText(data.get("label", ""))
@@ -63,6 +74,7 @@ class MYSQL(BaseEditor):
         self._ensure_serial()
 
         return {
+            "node_directive_path": self.path_selector.currentText().strip(),
             "serial": self.serial.text().strip(),
             "label": self.label.text().strip(),
             "channel": self.default_channel.currentText(),
@@ -92,6 +104,6 @@ class MYSQL(BaseEditor):
             return False, "Database name required."
 
         if self.default_channel.currentText().strip() == "":
-            return False, "Default channel is required."
+            return False, "Channel is required."
 
         return True, ""

@@ -1,5 +1,5 @@
 # Authored by Daniel F MacDonald and ChatGPT-5 aka The Generals
-from PyQt6.QtWidgets import QComboBox, QFormLayout, QLineEdit
+from PyQt6.QtWidgets import QComboBox, QFormLayout, QLineEdit, QCheckBox
 from .base_editor import BaseEditor
 from matrix_gui.core.class_lib.validation.network.ip_utils import IPUtils
 from matrix_gui.core.class_lib.validation.network.port_utils import PortUtils
@@ -12,6 +12,17 @@ class HTTPS(BaseEditor):
         self.default_channel = QComboBox()
         default_channel_options = default_channel_options or ["outgoing.command"]
         self.default_channel.addItems(default_channel_options)
+        self.default_outgoing = QCheckBox("Primary Outgoing Transport")
+        self.default_outgoing.setToolTip("Mark this connector as the default route for outgoing commands.")
+
+        self.path_selector = QComboBox()
+        # node directive path - add as you see fit - I'll fix this in the future - add config/https
+        self.path_selector.addItems([
+            "config", #default
+            #"config/https",
+            # "config/https_bk",
+            # "config/https_legacy",
+        ])
 
         self.label = QLineEdit(self.generate_default_label())
         self.host = QLineEdit()
@@ -25,27 +36,34 @@ class HTTPS(BaseEditor):
         layout.addRow("Port", self.port or 443)
         layout.addRow("Note", self.note)
         layout.addRow("Allowlist IPs", self.allowlist_ips)
-        layout.addRow("Default Channel", self.default_channel)
+        layout.addRow("", self.default_outgoing)
+        layout.addRow("Channel", self.default_channel)
+        layout.addRow("Directive Path", self.path_selector)  #  this is json node path where the agent's config is written
         layout.addRow("Serial", self.serial)
 
     def on_load(self, data):
+        path = data.get("node_directive_path", "config")
+        self.path_selector.setCurrentText(path)
         self.label.setText(data.get("label", ""))
         self.host.setText(data.get("host"))
         self.port.setText(str(data.get("port") or 443))
         self.note.setText(data.get("note", ""))
         self.allowlist_ips.setText(", ".join(data.get("allowlist_ips", [])))
+        self.default_outgoing.setChecked(bool(data.get("default_outgoing", False)))
         self.default_channel.setCurrentText(data.get("channel"))
         self.serial.setText(data.get("serial"))
 
     def deploy_fields(self):
         return {
             "proto": "https",
+            "default": True,
             "host": self.host.text().strip(),
             "port": int(self.port.text() or 443),
             "allowlist_ips": [
                 ip.strip() for ip in self.allowlist_ips.text().split(",") if ip.strip()
             ],
             "channel": self.default_channel.currentText(),
+            "default_outgoing": self.default_outgoing.isChecked(),
         }
 
     def serialize(self) -> dict:
@@ -53,6 +71,7 @@ class HTTPS(BaseEditor):
         self._ensure_serial()
 
         return {
+            "node_directive_path": self.path_selector.currentText().strip(),
             "label": self.label.text().strip(),
             "host": self.host.text().strip(),
             "port": int(self.port.text() or 0),
@@ -61,6 +80,7 @@ class HTTPS(BaseEditor):
                 ip.strip() for ip in self.allowlist_ips.text().split(",") if ip.strip()
             ],
             "channel": self.default_channel.currentText(),
+            "default_outgoing": self.default_outgoing.isChecked(),
             "serial": self.serial.text().strip(),
         }
 
@@ -104,7 +124,7 @@ class HTTPS(BaseEditor):
             return False, "Serial is required."
 
         if self.default_channel.currentText().strip() == "":
-            return False, "Default channel is required."
+            return False, "Channel is required."
 
         # All fields are valid
         return True, ""
