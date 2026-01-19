@@ -24,20 +24,24 @@
             "panel": [
                 "matrix_email.matrix_email"
             ]
-        }
-    },
-    "service-manager": [
-        {
-            "role": [
-                "matrix_email.status@cmd_list_status"
-            ],
-            "scope": [
-                "parent",
-                "any"
-            ],
-            "priority": {
-                "default": 10
+        },
+        "service-manager": [
+            {
+                "role": [
+                    "matrix_email.toggle_perimeter@cmd_toggle_perimeter",
+                    "hive.toggle_perimeter@cmd_toggle_perimeter",
+                    "matrix_email.status@cmd_status"
+                ],
+                "scope": [
+                    "parent",
+                    "any"
+                ],
+                "priority": {
+                    "default": 10
+                }
             }
-        }
-    ]
+        ]
+
+    }
+
 }

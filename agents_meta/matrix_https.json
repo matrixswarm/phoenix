@@ -16,17 +16,26 @@
         }
     ],
     "config": {
-        "service-manager": [],
-        "role": [
-            "hive.2fa@cmd_2fa_transport"
-        ],
         "ui": {
             "agent_tree": {
                 "emoji": "\ud83c\udf10"
             },
             "panel": [
-                "matrix_https.config"
+                "matrix_https.matrix_https"
             ]
-        }
+        },
+        "service-manager": [
+            {
+                "role": [
+                    "matrix_https.toggle_perimeter@cmd_toggle_perimeter",
+                    "hive.toggle_perimeter@cmd_toggle_perimeter",
+                    "matrix_https.status@cmd_status"
+                ],
+                "scope": [
+                    "parent",
+                    "any"
+                ]
+            }
+        ]
     }
 }

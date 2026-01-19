@@ -1,6 +1,7 @@
-# Authored by Daniel F MacDonald and ChatGPT-5 aka The Generals
+# Authored by Daniel F MacDonald and ChatGPT-5.1 aka The Generals
 # Commander Edition – Matrix HTTPS Perimeter Panel
-# Modeled directly after MatrixEmailPanel
+# Modeled directly after MatrixHTTPSPanel
+
 import time, json
 from PyQt6.QtCore import QMetaObject, Q_ARG, Qt
 from PyQt6.QtWidgets import (
@@ -13,8 +14,7 @@ from matrix_gui.core.panel.custom_panels.interfaces.base_panel_interface import 
 from matrix_gui.core.emit_gui_exception_log import emit_gui_exception_log
 from matrix_gui.core.panel.control_bar import PanelButton
 
-
-class MatrixEmail(PhoenixPanelInterface):
+class MatrixHttps(PhoenixPanelInterface):
     cache_panel = True
 
     def __init__(self, session_id, bus, node=None, session_window=None):
@@ -25,7 +25,7 @@ class MatrixEmail(PhoenixPanelInterface):
     # ----------------------------------------------------------
     def _build_ui(self):
         layout = QVBoxLayout()
-        layout.addWidget(QLabel("📧 Matrix Email — Perimeter Control"))
+        layout.addWidget(QLabel("🌐️ Matrix HTTPS — Perimeter Control"))
 
         # STATE: OPEN / LOCKDOWN
         row_state = QHBoxLayout()
@@ -38,11 +38,11 @@ class MatrixEmail(PhoenixPanelInterface):
         row_target = QHBoxLayout()
         row_target.addWidget(QLabel("Target Scope:"))
         self.target_combo = QComboBox()
-        self.target_combo.addItems(["matrix_email", "perimeter marked agents"])
+        self.target_combo.addItems(["matrix_https", "perimeter marked agents"])
 
-        # attach values
-        self.target_combo.setItemData(0, "matrix_email.toggle_perimeter")  # visible "matrix_email"
-        self.target_combo.setItemData(1, "hive.toggle_perimeter")  # visible "all perimeter" -> "hive"
+        # attach vault values
+        self.target_combo.setItemData(0, "matrix_https.toggle_perimeter")  # visible "matrix_https" -> vault "matrix_https"
+        self.target_combo.setItemData(1, "hive.toggle_perimeter")  # visible "all perimeter" -> vault "hive"
         row_target.addWidget(self.target_combo)
         layout.addLayout(row_target)
 
@@ -53,6 +53,14 @@ class MatrixEmail(PhoenixPanelInterface):
         self.time_input.setPlaceholderText("0 = indefinite")
         row_time.addWidget(self.time_input)
         layout.addLayout(row_time)
+
+        # 2FA TOKEN (optional)
+        #row_token = QHBoxLayout()
+        #row_token.addWidget(QLabel("2FA Token:"))
+        #self.token_input = QLineEdit()
+        #self.token_input.setPlaceholderText("If 2FA enabled")
+        #row_token.addWidget(self.token_input)
+        #layout.addLayout(row_token)
 
         # BUTTON BAR
         btns = QHBoxLayout()
@@ -80,7 +88,7 @@ class MatrixEmail(PhoenixPanelInterface):
         try:
             lockdown_state = 0 if self.state_combo.currentText().lower() == "open" else 1
             lockdown_time = int(self.time_input.text() or 0)
-            # token = self.token_input.text().strip()
+            #token = self.token_input.text().strip()
 
             # Safety confirmation for indefinite lockdown
             if lockdown_state and lockdown_time == 0:
@@ -109,9 +117,9 @@ class MatrixEmail(PhoenixPanelInterface):
                     "payload": {
                         "lockdown_state": lockdown_state,
                         "lockdown_time": lockdown_time,
-                        # "token": token,
+                        #"token": token,
                         "session_id": self.session_id,
-                        "return_handler": "matrix_email_panel.perimeter_ack"
+                        "return_handler": "matrix_https_panel.perimeter_ack"
                     }
                 }
             })
@@ -126,7 +134,7 @@ class MatrixEmail(PhoenixPanelInterface):
             self.output_box.append("📡 Sent perimeter toggle request...\n")
 
         except Exception as e:
-            emit_gui_exception_log("MatrixEmailPanel._send_toggle", e)
+            emit_gui_exception_log("MatrixHTTPSPanel._send_toggle", e)
 
     # ----------------------------------------------------------
     def _refresh_status(self):
@@ -136,10 +144,10 @@ class MatrixEmail(PhoenixPanelInterface):
                 "handler": "cmd_service_request",
                 "ts": time.time(),
                 "content": {
-                    "service": "matrix_email.status",
+                    "service": "matrix_https.status",
                     "payload": {
                         "session_id": self.session_id,
-                        "return_handler": "matrix_email_panel.status_ack",
+                        "return_handler": "matrix_https_panel.status_ack",
                     }
                 }
             })
@@ -153,7 +161,7 @@ class MatrixEmail(PhoenixPanelInterface):
             self.output_box.append("📡 Requesting perimeter status...\n")
 
         except Exception as e:
-            emit_gui_exception_log("MatrixEmailPanel._refresh_status", e)
+            emit_gui_exception_log("MatrixHTTPSPanel._refresh_status", e)
 
     # ----------------------------------------------------------
     def _perimeter_ack(self, session_id, channel, source, payload, **_):
@@ -165,7 +173,7 @@ class MatrixEmail(PhoenixPanelInterface):
             self.output_box,
             "setPlainText",
             Qt.ConnectionType.QueuedConnection,
-            Q_ARG(str, f"📧 Perimeter Toggle ACK:\n{formatted}")
+            Q_ARG(str, f"🌐 Perimeter Toggle ACK:\n{formatted}")
         )
 
     # ----------------------------------------------------------
@@ -184,15 +192,15 @@ class MatrixEmail(PhoenixPanelInterface):
     # ----------------------------------------------------------
     def _connect_signals(self):
         super()._connect_signals() if hasattr(super(), "_connect_signals") else None
-        self.bus.on("inbound.verified.matrix_email_panel.perimeter_ack", self._perimeter_ack)
-        self.bus.on("inbound.verified.matrix_email_panel.status_ack", self._status_ack)
+        self.bus.on("inbound.verified.matrix_https_panel.perimeter_ack", self._perimeter_ack)
+        self.bus.on("inbound.verified.matrix_https_panel.status_ack", self._status_ack)
 
     def _disconnect_signals(self):
         super()._disconnect_signals() if hasattr(super(), "_disconnect_signals") else None
-        self.bus.off("inbound.verified.matrix_email_panel.perimeter_ack", self._perimeter_ack)
-        self.bus.off("inbound.verified.matrix_email_panel.status_ack", self._status_ack)
+        self.bus.off("inbound.verified.matrix_https_panel.perimeter_ack", self._perimeter_ack)
+        self.bus.off("inbound.verified.matrix_https_panel.status_ack", self._status_ack)
 
     def get_panel_buttons(self):
         return [
-            PanelButton("📧", "Matrix Email", lambda: self.session_window.show_specialty_panel(self))
+            PanelButton("🌐", "Matrix HTTPS", lambda: self.session_window.show_specialty_panel(self))
         ]

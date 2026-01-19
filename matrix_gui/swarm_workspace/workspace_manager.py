@@ -1,8 +1,10 @@
 # Authored by Daniel F MacDonald and ChatGPT-5.1 aka The Generals
 # Commander Edition Workspace Manager
+# Gemini, code enhancements: clone workspace feature added 20260114
 # NOW USING VaultConnectionSingleton instead of raw vault dict.
 import uuid
 import json
+import copy
 from pathlib import Path
 from matrix_gui.core.event_bus import EventBus
 from PyQt6.QtWidgets import (
@@ -38,11 +40,13 @@ class WorkspaceManagerDialog(QDialog):
         btns = QHBoxLayout()
         self.new_btn = QPushButton("🆕 New")
         self.open_btn = QPushButton("📂 Open")
+        self.clone_btn = QPushButton("👯 Clone")
         self.rename_btn = QPushButton("✏️ Rename")
         self.delete_btn = QPushButton("🗑 Delete")
 
         btns.addWidget(self.new_btn)
         btns.addWidget(self.open_btn)
+        btns.addWidget(self.clone_btn)
         btns.addWidget(self.rename_btn)
         btns.addWidget(self.delete_btn)
         layout.addLayout(btns)
@@ -52,6 +56,7 @@ class WorkspaceManagerDialog(QDialog):
         # Signals
         self.new_btn.clicked.connect(self._new_workspace)
         self.open_btn.clicked.connect(self._open_workspace)
+        self.clone_btn.clicked.connect(self._clone_workspace)
         self.rename_btn.clicked.connect(self._rename_workspace)
         self.delete_btn.clicked.connect(self._delete_workspace)
         self.ws_list.itemDoubleClicked.connect(self._open_workspace)
@@ -121,6 +126,45 @@ class WorkspaceManagerDialog(QDialog):
 
         except Exception as e:
             emit_gui_exception_log("WorkspaceManagerDialog._new_workspace", e)
+
+    def _clone_workspace(self):
+        """Creates a deep copy of the selected workspace with a new UUID."""
+        try:
+            item = self.ws_list.currentItem()
+            if not item:
+                QMessageBox.warning(self, "No Selection", "Select a workspace to clone.")
+                return
+
+            original_uuid = item.data(Qt.ItemDataRole.UserRole)
+            original_ws = self.workspaces.get(original_uuid)
+
+            if not original_ws:
+                return
+
+            # 1. Deep copy the data to ensure independence
+            new_ws = copy.deepcopy(original_ws)
+
+            # 2. Assign a new UUID and update the label
+            new_uuid = uuid.uuid4().hex
+            new_ws["uuid"] = new_uuid
+            new_ws["label"] = f"Copy of {original_ws.get('label', 'Untitled')}"
+
+            # 3. Insert into the vault dictionary
+            self.workspaces[new_uuid] = new_ws
+
+            # 4. Persist and Refresh
+            self._persist()
+            self._populate()
+
+            # Select the new clone in the list
+            for i in range(self.ws_list.count()):
+                if self.ws_list.item(i).data(Qt.ItemDataRole.UserRole) == new_uuid:
+                    self.ws_list.setCurrentRow(i)
+                    break
+
+        except Exception as e:
+            emit_gui_exception_log("WorkspaceManagerDialog._clone_workspace", e)
+            QMessageBox.critical(self, "Clone Error", f"Failed to clone: {e}")
 
     # ------------------------------------------------------------------
     def _open_workspace(self):

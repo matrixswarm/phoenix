@@ -18,7 +18,8 @@
         "service-manager": [
             {
                 "role": [
-                    "hive.alert@cmd_send_alert_msg"
+                    "hive.alert@cmd_send_alert_msg",
+                    "hive.2fa@cmd_2fa_transport"
                 ],
                 "scope": [
                     "parent",

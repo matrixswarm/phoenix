@@ -19,14 +19,21 @@
         "ui": {
             "agent_tree": {
                 "emoji": "\ud83d\udef0\ufe0f"
-            }
+            },
+            "panel": [
+                "matrix_websocket.matrix_websocket"
+            ]
+
         },
         "service-manager": [
             {
                 "role": [
                     "hive.alert@cmd_send_alert_msg",
                     "hive.swarm_feed.alert@cmd_send_alert_msg",
-                    "hive.rpc@cmd_rpc_route"
+                    "hive.rpc@cmd_rpc_route",
+                    "matrix_websocket.toggle_perimeter@cmd_toggle_perimeter",
+                    "hive.toggle_perimeter@cmd_toggle_perimeter",
+                    "matrix_websocket.status@cmd_status"
                 ],
                 "scope": [
                     "parent",

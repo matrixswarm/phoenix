@@ -1,34 +1,17 @@
 # Authored by Daniel F MacDonald and ChatGPT-5 aka The Generals
 import os
-import io
 import json
 import hashlib
 import uuid
-import base64
-import paramiko
-import ntpath
-import posixpath
-
-from copy import deepcopy
-from PyQt6 import QtWidgets, QtCore
-
+from PyQt6 import QtWidgets
 from PyQt6.QtWidgets import (
     QVBoxLayout, QHBoxLayout, QFileDialog, QMessageBox, QDialog, QPushButton,QWidget
 )
 from pathlib import Path
 from runpy import run_path
-from matrix_gui.modules.vault.crypto.deploy_tools import generate_swarm_encrypted_directive
-from matrix_gui.modules.directive.encryption_staging_dialog import EncryptionStagingDialog
-from matrix_gui.modules.directive.ui.deployment_dialog import DeploymentDialog
-from matrix_gui.modules.directive.deploy_options_dialog import DeployOptionsDialog
 from matrix_gui.core.event_bus import EventBus
-
-from matrix_gui.modules.directive.deployment.helper.mint_deployment_metadata import mint_deployment_metadata
-from matrix_gui.core.dialog.agent_root_check_dialog import AgentRootCheckDialog
-from matrix_gui.core.class_lib.paths.agent_root_selector import AgentRootSelector
 from matrix_gui.core.emit_gui_exception_log import emit_gui_exception_log
 from PyQt6.QtWidgets import QInputDialog, QListWidget, QPushButton, QTextEdit, QLabel, QSplitter
-from matrix_gui.modules.vault.crypto.deploy_tools import write_encrypted_bundle_to_file
 from matrix_gui.modules.vault.ui.dump_vault_popup import DumpVaultPopup
 from matrix_gui.modules.vault.services.vault_core_singleton import VaultCoreSingleton
 from matrix_gui.swarm_workspace.workspace_manager import WorkspaceManagerDialog
