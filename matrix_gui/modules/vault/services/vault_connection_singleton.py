@@ -1,5 +1,4 @@
 import threading, time, copy
-
 from matrix_gui.core.emit_gui_exception_log import emit_gui_exception_log
 
 class VaultConnectionSingleton:

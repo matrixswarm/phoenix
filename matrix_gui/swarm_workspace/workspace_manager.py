@@ -222,9 +222,7 @@ class WorkspaceManagerDialog(QDialog):
         uuid_ = item.data(Qt.ItemDataRole.UserRole)
         current = self.workspaces[uuid_].get("label", "")
 
-        new_name, ok = QInputDialog.getText(
-            self, "Rename Workspace", "New label:", text=current
-        )
+        new_name, ok = QInputDialog.getText(self, "Rename Workspace", "New label:", text=current)
 
         if ok and new_name.strip():
             self.workspaces[uuid_]["label"] = new_name.strip()

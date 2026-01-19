@@ -1,13 +1,40 @@
+<!-- ================= PHOENIX HEADER BLOCK ================= -->
+
+<div align="center">
+
+# **Phoenix Cockpit**
+### *The Secure Control Plane for the MatrixSwarm Universe*
+**Version:** 1.1 · **Status:** Pre-Release · **License:** MatrixSwarm Community License (Modified MIT)
+---
+[![Built with PyQt6](https://img.shields.io/badge/Built%20with-PyQt6%206.6+-blue.svg?style=flat-square)](#)
+[![Security Verified](https://img.shields.io/badge/Security-Vault%20Locked%20%26%20SPKI%20Pinned-green.svg?style=flat-square)](#)
+[![MatrixOS Core](https://img.shields.io/badge/Requires-MatrixOS%203.10+-orange.svg?style=flat-square)](https://github.com/matrixswarm/matrixos)
+[![Discord Hive](https://img.shields.io/badge/Join-The%20Hive-7289da?style=flat-square&logo=discord)](https://discord.gg/CyngHqDmku)
+---
+### **Phoenix** is not a dashboard — it’s the *nervous system* of the swarm.  
+It decrypts your vault, orchestrates universes, and issues signed commands to living agents.
+
+- Vault-secured command chain (no vault = no ops)  
+- End-to-end encrypted HTTPS / WebSocket relay  
+- Real-time logs, threads, and service panels  
+- Full directive builder with embedded crypto certs  
+- Railgun remote installer for one-click MatrixOS deployment  
+
+---
+
+> “The Queen never speaks directly — Phoenix is her voice.”
+
+**MatrixSwarm Digital Labs — Victory Always.**
+
+</div>
+
+<!-- ========================================================= -->
 
 ## Phoenix Cockpit
 
 Phoenix Cockpit is the GUI control plane for MatrixOS — a secure multi-agent runtime for orchestrating autonomous services.
 (from the MatrixSwarm ecosystem )
 
----
- 
-## Next drop includes:
-- Added 2AUTH to Swarm; 2AUTH panel added to retrieve and verify token 
 ---
 
 ## 💙 Support Development

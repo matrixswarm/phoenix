@@ -5,6 +5,7 @@ import datetime
 from pathlib import Path
 import inspect
 import copy
+from PyQt6 import QtWidgets
 from PyQt6.QtGui import QIcon
 from PyQt6.QtCore import Qt, QSize, QTimer
 from PyQt6.QtWidgets import (
@@ -32,7 +33,8 @@ from matrix_gui.core.panel.multiplexer_panel import MultiplexerPanel
 from matrix_gui.core.panel.control_bar import ControlBar
 from matrix_gui.modules.vault.services.vault_connection_singleton import VaultConnectionSingleton
 from matrix_gui.core.class_lib.packet_delivery.packet.standard.command.packet import Packet
-
+from matrix_gui.modules.vault.services.vault_core_singleton import VaultCoreSingleton
+from matrix_gui.modules.directive.deploy_dialog import DeployDialog
 
 def run_session(session_id, conn):
     """
@@ -734,6 +736,33 @@ class SessionWindow(QMainWindow):
             emit_gui_exception_log("SessionWindow._launch_inject_agent_modal", e)
 
     def _launch_matrix_reboot(self):
+        try:
+
+            # Ask cockpit for the full registry
+            data = self.vault_singleton.fetch_fresh(target="registry")
+            ssh_map = data.get("ssh", {})
+
+            if not ssh_map:
+                QtWidgets.QMessageBox.warning(self, "No SSH Targets", "No SSH configurations found in the vault.")
+                return
+
+            # Which SSH serial was saved in this deployment?
+            default_serial = self.deployment.get("ssh_serial")
+
+            dlg = DeployDialog(
+                ssh_map=ssh_map,
+                default_serial=default_serial,
+                deployment=self.deployment,
+                parent=self
+            )
+
+            dlg.exec()
+
+        except Exception as e:
+            print(f"[CONTROL][ERROR] {e}")
+
+    #this is going to be converted to swarm only control
+    def _launch_matrix_rebooted(self):
         try:
             # === SAFETY PROMPT ===
             confirm = QMessageBox.question(
