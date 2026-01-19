@@ -1,7 +1,6 @@
 # Authored by Daniel F MacDonald and ChatGPT-5.1 aka The Generals
 # Commander Edition Workspace Manager
 # Gemini, code enhancements: clone workspace feature added 20260114
-# NOW USING VaultConnectionSingleton instead of raw vault dict.
 import uuid
 import json
 import copy
