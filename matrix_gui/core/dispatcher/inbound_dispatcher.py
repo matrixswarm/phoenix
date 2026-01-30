@@ -54,9 +54,6 @@ class InboundDispatcher:
             # Verify sig on the envelope
             verify_signed_payload(payload, payload["sig"], signer_pubkey)
 
-            # === 2. Transport / Decrypt Stage ===
-            transport_uid = channel  # e.g. "matrix-https" or "websocket-relay"
-
             agent_priv_pem = signing.get("remote_privkey")
 
             inner_content = payload.get("content", {})

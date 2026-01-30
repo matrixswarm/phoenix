@@ -1,7 +1,7 @@
 from .base_editor import BaseEditor
 from PyQt6.QtWidgets import (
     QVBoxLayout, QHBoxLayout, QWidget, QListWidget, QComboBox,
-    QPushButton, QInputDialog, QLabel, QLineEdit, QFormLayout
+    QPushButton, QInputDialog, QLabel, QLineEdit, QFormLayout, QCheckBox
 )
 
 class Sora(BaseEditor):
@@ -33,6 +33,13 @@ class Sora(BaseEditor):
         self.res.addItems(["720x1280", "1280x720", "1024x1792", "1792x1024"])
         self.res.setCurrentText(cfg.get("resolution", "1280x720"))
         core_layout.addRow("Resolution:", self.res)
+
+        # Watermark on final frame
+        self.watermark_enabled = QCheckBox("Enable watermark")
+        self.watermark_enabled.setChecked(bool(cfg.get("watermark_enabled", False)))
+        self.watermark_text = QLineEdit(cfg.get("water_mark_text", ""))
+        core_layout.addRow(self.watermark_enabled)
+        core_layout.addRow(self.watermark_text)
 
         # Duration (seconds)
         self.duration = QLineEdit(str(cfg.get("duration", 30)))
@@ -135,6 +142,8 @@ class Sora(BaseEditor):
             "poll_interval": int(self.poll.text()),
             "video_output_path": self.video_path.text(),
             "thumbnail_output_path": self.thumb_path.text(),
+            "watermark_enabled": self.watermark_enabled.isChecked(),
+            "water_mark_text": self.watermark_text.text().strip(),
             "service-manager": [{"role": roles}],
         })
 

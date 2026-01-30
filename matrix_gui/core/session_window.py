@@ -7,12 +7,11 @@ import inspect
 import copy
 from PyQt6 import QtWidgets
 from PyQt6.QtGui import QIcon
-from PyQt6.QtCore import Qt, QSize, QTimer
+from PyQt6.QtCore import QSize, QTimer, QMetaObject, Qt, Q_ARG, pyqtSlot
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QToolBar,
     QGroupBox, QApplication, QMainWindow, QStackedWidget, QLabel, QMessageBox
 )
-
 from matrix_gui.core.panel.control_bar import PanelButton
 from matrix_gui.core.panel.agent_detail.agent_detail_panel import AgentDetailPanel
 from matrix_gui.core.panel.crypto_alert.crypto_alert import CryptoAlertPanel
@@ -33,7 +32,6 @@ from matrix_gui.core.panel.multiplexer_panel import MultiplexerPanel
 from matrix_gui.core.panel.control_bar import ControlBar
 from matrix_gui.modules.vault.services.vault_connection_singleton import VaultConnectionSingleton
 from matrix_gui.core.class_lib.packet_delivery.packet.standard.command.packet import Packet
-from matrix_gui.modules.vault.services.vault_core_singleton import VaultCoreSingleton
 from matrix_gui.modules.directive.deploy_dialog import DeployDialog
 
 def run_session(session_id, conn):
@@ -71,7 +69,7 @@ def run_session(session_id, conn):
             print(f"[SESSION][WARN] Theme file not found at {theme_path}")
 
     except Exception as e:
-        print("[SESSION][ERROR] Failed to load theme dynamically:", e)
+        emit_gui_exception_log("[SESSION][ERROR] Failed to load theme dynamically:", e)
 
     try:
 
@@ -120,7 +118,7 @@ def run_session(session_id, conn):
             else:
                 print("[SESSION][CHECK] ✅ Ingress/Egress agents detected.")
         except Exception as e:
-            print(f"[SESSION][WARN] Preflight check failed: {e}")
+            emit_gui_exception_log(f"[SESSION][WARN] Preflight check failed", e)
 
         ctx = _connect_single(deployment, session_id, deployment.get("id"))
         inbound = InboundDispatcher(ctx.bus)
@@ -157,8 +155,7 @@ def run_session(session_id, conn):
             app.exec()
         except Exception as e:
             import traceback
-            print("[SESSION][FATAL] Exception in session loop:")
-            traceback.print_exc()
+            emit_gui_exception_log("[SESSION][FATAL] Exception in session loop", e)
         finally:
             try:
                 conn.send({"type": "exit", "session_id": session_id})
@@ -350,10 +347,15 @@ class SessionWindow(QMainWindow):
             emit_gui_exception_log("session_window._handle_channel_status", e)
 
     def _handle_packet_sent(self, start_end=1):
-        """
-        start_end = 1 → flash (sending)
-        start_end = 0 → revert (done)
-        """
+        QMetaObject.invokeMethod(
+            self,
+            "_handle_packet_sent_ui",
+            Qt.ConnectionType.QueuedConnection,
+            Q_ARG(int, start_end)
+        )
+
+    @pyqtSlot(int)
+    def _handle_packet_sent_ui(self, start_end):
         try:
             # determine symbol
             dot = "🟢" if start_end else "⚪"
@@ -379,7 +381,7 @@ class SessionWindow(QMainWindow):
                 QTimer.singleShot(400, lambda: self._handle_packet_sent(0))
 
         except Exception as e:
-            print(f"[BLINK][ERROR] packet.sent handler: {e}")
+            emit_gui_exception_log(f"[BLINK][ERROR] packet.sent handler", e)
 
     def _reset_outgoing_badge(self, style):
         self.outgoing_badge.setStyleSheet(style)
@@ -880,8 +882,26 @@ class SessionWindow(QMainWindow):
         print(f"[SESSION] Received external close for {self.session_id}")
         self.close()
 
+    def unhook_bus_handlers(self):
+        """Detach all ConnectorBus event bindings held by a ctx."""
+
+        try:
+
+            if hasattr(self.ctx, "_bus_refs"):
+                for event_name, handler in self.ctx._bus_refs:
+                    self.bus.off(event_name, handler)
+                    print(f"[BUS] 🔌 Unhooked {event_name} from {self.ctx.id}")
+                self.ctx._bus_refs.clear()
+
+            if hasattr(self.ctx, "bus"):
+                self.ctx.bus.clear()  # Clears SessionBus listeners
+                print(f"[BUS] Cleared SessionBus for {self.ctx.id}")
+
+        except Exception as e:
+            print(f"[BUS][ERROR] Failed to unhook bus handlers: {e}")
 
     def closeEvent(self, event):
+
         print(f"[SESSION] {self.cockpit_id} closing, destroying session")
         try:
 
@@ -891,7 +911,6 @@ class SessionWindow(QMainWindow):
             self.bus.off("gui.agent.selected", self._handle_agent_selected)
             self.bus.off("gui.log.token.updated", self._set_active_log_token)
 
-
             for panel in self._panel_cache.values():
                 try:
                     #panel._disconnect_signals()
@@ -899,6 +918,17 @@ class SessionWindow(QMainWindow):
 
                 except Exception as e:
                     print(f"[SESSION][CLEANUP] Failed to delete panel: {e}")
+
+            try:
+                launcher = self.ctx.group.get("connection_launcher", None)
+                if launcher:
+                    launcher.destroy_all()
+                    self.unhook_bus_handlers()
+                    print("[SESSION_WINDOW] ✅ All connections destroyed.")
+                else:
+                    print("[SESSION_WINDOW] ⚠️ No launcher found in ctx.")
+            except Exception as e:
+                print(f"[SESSION_WINDOW][ERROR] during shutdown: {e}")
 
             self._panel_cache.clear()
 
@@ -915,4 +945,5 @@ class SessionWindow(QMainWindow):
                 except (BrokenPipeError, OSError):
                     print("[SESSION][EXIT] Pipe already closed – skipping exit signal.")
 
+            event.accept()
 

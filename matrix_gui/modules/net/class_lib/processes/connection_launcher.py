@@ -1,0 +1,363 @@
+# Authored by Daniel F MacDonald and ChatGPT-5 aka The Generals
+import importlib
+import threading
+
+import time
+import uuid
+from matrix_gui.core.emit_gui_exception_log import emit_gui_exception_log
+class ConnectionLauncher:
+    """
+    ConnectionLauncher — Swarm Thread Orchestrator
+    ------------------------------------------
+    • Dynamically loads classes
+    • Executes them as managed threads
+    • Supports ephemeral and persistent workers
+    • Centralized logging via BootAgent.log
+    """
+
+    def __init__(self):
+        """
+        Initialize the ConnectionLauncher with empty registries and lock.
+
+        Attributes:
+            _threads (dict): Maps thread_id → threading.Thread instance.
+            _registry (dict): Maps universal_id → metadata dict for each connector.
+            _shared_state (dict): Maps universal_id → shared context dict.
+            _lock (threading.Lock): Ensures thread-safe registry updates.
+        """
+        self._threads = {}        # thread_id -> Thread
+        self._registry = {}       # thread_id -> metadata
+        self._shared_state = {}   # thread_id -> shared dict
+        self._lock = threading.Lock()
+
+        print("ThreadLauncher initialized")
+
+    # --------------------------------------------------
+    def load(self, universal_id, class_path, context=None, check_interval=30):
+        """
+        Register a connector class under a universal identifier.
+
+        Args:
+            universal_id (str): Unique key to refer to this connector.
+            class_path (str): Dotted path to the connector class.
+            context (dict, optional): Initial context passed into connector instances.
+            check_interval (int, optional): Heartbeat check interval in seconds.
+
+        Returns:
+            ConnectionLauncher: Self for fluent chaining.
+        """
+        context = context or {}
+
+        with self._lock:
+            self._registry[universal_id] = {
+                "universal_id": universal_id,
+                "class_path": class_path,
+                "context": context,
+                "persist": True,  # persistent by definition
+                "check_interval": check_interval,
+                "thread_id": None,
+            }
+
+            self._shared_state[universal_id] = {
+                "universal_id": universal_id,
+                "thread_id": None,
+                "class_path": class_path,
+                "context": context,
+                "started_at": None,
+                "last_heartbeat": None,
+                "stop": False,
+            }
+
+        #print(f"[ThreadLauncher][LOAD] Registered {class_path} as {universal_id}")
+        return self
+
+    def launch(self, universal_id, packet:dict=None, fire_catapult=False):
+        """
+        Instantiate and start the connector as a daemon thread.
+
+        Args:
+            universal_id (str): Identifier under which the class was loaded.
+            packet (dict, optional): Initial packet data to inject into context.
+            fire_catapult (bool, optional): Force immediate launch even if run_on_launch=False.
+
+        Returns:
+            threading.Thread | None: The thread object if launched, else None.
+        """
+        try:
+            with self._lock:
+                meta = self._registry.get(universal_id)
+                if not meta:
+                    print(f"[LAUNCH][ERROR] No such universal_id {universal_id}")
+                    return None
+
+                class_path = meta["class_path"]
+                context = meta["context"]
+                thread_id = uuid.uuid4().hex
+
+                shared = self._shared_state[universal_id]
+                shared["thread_id"] = thread_id
+                shared["started_at"] = time.time()
+                shared["last_heartbeat"] = time.time()
+                shared["stop"] = False
+
+            cls = self._load_class(class_path)
+            persist = getattr(cls, "persistent", False)
+            run_on_launch = getattr(cls, "run_on_launch", False)
+
+            t=None
+            if fire_catapult or run_on_launch:
+                shared = {"session_id": context.get("session_id"),
+                          "agent": context.get("agent"),
+                          "deployment": context.get("deployment"),
+                          "context": context,
+                          "packet": packet}
+
+                instance = cls(shared=shared)
+
+                t = threading.Thread(
+                    target=instance.run,
+                    name=f"thread:{class_path}",
+                    daemon=True,
+                )
+                if persist:
+                    with self._lock:
+                        meta["thread_id"] = thread_id
+                        self._threads[thread_id] = t
+
+                t.start()
+
+                print(f"[ThreadLauncher][LAUNCH] Started {universal_id} as thread {thread_id}")
+
+            return t
+
+        except Exception as e:
+            emit_gui_exception_log("ThreadLauncher.launch()", e)
+
+    # --------------------------------------------------
+    def kill_thread(self, thread_id: str):
+        """
+        Terminate and clean up a managed thread.
+
+        Args:
+            thread_id (str): Identifier of the thread to kill.
+        """
+        with self._lock:
+            t = self._threads.get(thread_id)
+            if not t:
+                print(f"[NUKER] No active thread {thread_id} to nuke.")
+                return
+            print(f"[NUKER] Nuking thread {thread_id}")
+            self._shared_state.pop(thread_id, None)
+            self._registry.pop(thread_id, None)
+            try:
+                if t.is_alive():
+                    # Try to stop gracefully if possible
+                    shared = self._shared_state.get(thread_id)
+                    if shared:
+                        shared["stop"] = True
+                    # force cleanup
+                    t.join(timeout=1)
+            except Exception as e:
+                print(f"[NUKER][WARN] Exception during kill: {e}")
+            finally:
+                self._threads.pop(thread_id, None)
+
+   # --------------------------------------------------
+    def start_auto_monitor(self, check_interval: int = 10):
+        """
+        Starts an internal background monitor thread that keeps
+        all persistent threads alive. Auto-relaunches any that
+        die or stop heartbeating.
+        """
+        if hasattr(self, "_monitor_thread") and self._monitor_thread.is_alive():
+            return  # already running
+
+        def _monitor_loop():
+            print("[ThreadLauncher][MONITOR] Auto-monitor active.")
+            while True:
+                try:
+                    now = time.time()
+                    restarts = []
+
+                    with self._lock:
+                        for uid, meta in self._registry.items():
+                            tid = meta["thread_id"]
+                            t = self._threads.get(tid)
+                            shared = self._shared_state.get(uid)
+                            alive = t.is_alive() if t else False
+
+                            # restart conditions:
+                            if not alive:
+                                restarts.append(uid)
+                            else:
+                                hb = shared.get("last_heartbeat", 0)
+                                if now - hb > meta["check_interval"] * 2:
+                                    restarts.append(uid)
+
+                    for uid in restarts:
+                        print(f"[MONITOR] Restarting {uid}")
+                        old_tid = self._registry[uid]["thread_id"]
+                        self.kill_thread(old_tid)
+                        self.launch(uid)
+
+                    time.sleep(10)
+
+                except Exception as e:
+                    emit_gui_exception_log("ThreadLauncher.auto_monitor()", e)
+                    time.sleep(check_interval)
+
+        self._monitor_thread = threading.Thread(target=_monitor_loop, name="thread_launcher_monitor", daemon=True)
+        self._monitor_thread.start()
+
+    # --------------------------------------------------
+    def stop(self, thread_id: str):
+        """
+        Signal a running thread to stop gracefully.
+
+        Args:
+            thread_id (str): Identifier of the thread to signal.
+        """
+        try:
+            with self._lock:
+                shared = self._shared_state.get(thread_id)
+                if not shared:
+                    print(f"Stop requested for unknown thread {thread_id}")
+                    return
+
+                shared["stop"] = True
+                print(f"Stop signal sent to thread {thread_id}")
+
+        except Exception as e:
+            emit_gui_exception_log("ThreadLauncher.stop()", e)
+
+    # --------------------------------------------------
+    def _cleanup(self, thread_id: str):
+        """
+        Internal cleanup hook after a thread exits to remove registry entries.
+
+        Args:
+            thread_id (str): Identifier of the thread that exited.
+        """
+        try:
+            meta={}
+            with self._lock:
+                uid = None
+                # find the uid that owns this thread_id
+                for k, v in self._registry.items():
+                    if v.get("thread_id") == thread_id:
+                        uid = k
+                        break
+                if uid:
+                    meta = self._registry.get(uid)
+
+            if meta:
+                print(f"Thread {thread_id} cleaned up ({meta.get('class_path')})")
+            else:
+                print(f"Thread {thread_id} cleanup with no registry entry")
+
+        except Exception as e:
+            emit_gui_exception_log("ThreadLauncher.cleanup()", e)
+
+    # --------------------------------------------------
+    def _load_class(self, dotted_path: str):
+        """
+        Dynamically import and return a class by its dotted module path.
+
+        Args:
+            dotted_path (str): Module and class name, e.g. 'module.sub.ClassName'.
+
+        Returns:
+            type: The class object referenced by dotted_path.
+
+        Raises:
+            Exception: Propagates any error during import or attribute lookup.
+        """
+        try:
+
+            module_path, class_name = dotted_path.rsplit(".", 1)
+            module = importlib.import_module(module_path)
+            cls = getattr(module, class_name)
+
+            return cls
+
+        except Exception as e:
+            emit_gui_exception_log("ThreadLauncher._load_class()", e)
+            raise
+
+    # --------------------------------------------------
+    def get_shared(self, thread_id: str):
+        """
+        Retrieve the shared context dict for a specific running thread.
+
+        Args:
+            thread_id (str): Identifier of the thread.
+
+        Returns:
+            dict | None: Shared context if found, else None.
+        """
+        try:
+            with self._lock:
+                shared = self._shared_state.get(thread_id)
+                if not shared:
+                    print(f"get_shared: unknown thread {thread_id}")
+                    return None
+                return shared
+        except Exception as e:
+            emit_gui_exception_log("ThreadLauncher.get_shared()", e)
+            return None
+
+    # --------------------------------------------------
+    def destroy_all(self, force=False):
+        """
+        Destroy all active connections and threads managed by the launcher.
+
+        Args:
+            force (bool, optional): If True, forcibly clears registries even if
+                threads fail to exit gracefully.
+
+        Behavior:
+            1. Signals all threads to stop via shared state.
+            2. Attempts graceful join on each thread.
+            3. Force-cleans thread registry and state maps.
+            4. Stops the monitor loop if running.
+        """
+        try:
+            print("[ThreadLauncher][DESTROY] Commencing full shutdown sequence...")
+            with self._lock:
+                # signal stop
+                for tid, shared in list(self._shared_state.items()):
+                    if shared:
+                        shared["stop"] = True
+
+                threads = list(self._threads.items())
+
+            # attempt graceful join
+            for tid, t in threads:
+                if t.is_alive():
+                    print(f"[DESTROY] Waiting for thread {tid} to stop...")
+                    t.join(timeout=2)
+
+            # final cleanup
+            with self._lock:
+                self._threads.clear()
+                self._registry.clear()
+                self._shared_state.clear()
+
+            # stop monitor loop if any
+            if hasattr(self, "_monitor_thread") and self._monitor_thread.is_alive():
+                print("[DESTROY] Stopping monitor thread...")
+                self._monitor_thread = None  # daemon thread will exit on its own
+
+            print("[ThreadLauncher][DESTROY] ✅ All connections destroyed.")
+        except Exception as e:
+            if not force:
+                emit_gui_exception_log("ThreadLauncher.destroy_all()", e)
+            else:
+                # fallback: hard purge everything
+                self._threads.clear()
+                self._registry.clear()
+                self._shared_state.clear()
+                self._monitor_thread = None
+                print("[ThreadLauncher][DESTROY][FORCE] ⚠️ Forced purge completed.")
+
+

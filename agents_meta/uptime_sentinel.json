@@ -21,7 +21,7 @@
 
         "interval_sec": 30,
         "cooldown": 120,
-
+        "alert_enabled": true,
         "alert_to_role": "hive.alert",
 
         "_comment_targets_example": "{ 'url': 'https://example.com', 'note': 'Main Site', 'expect': 'some random text expected to be on the page' }",

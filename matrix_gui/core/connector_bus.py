@@ -24,12 +24,21 @@ class ConnectorBus:
 
     def emit(self, event, *args, **kwargs):
         listeners = self._listeners.get(event, [])
-        print(f"[CONN-BUS[{self.session_id[:8]}]] 🔊 EMIT {event} → {len(listeners)}")
+        origin = kwargs.get("origin")
+        try:
+            print(
+                f"[CONN-BUS[{getattr(self, 'session_id', '????')[:8]}]] 🔊 "
+                f"EMIT {event} (origin={origin}) → {len(listeners)} listeners"
+            )
+        except Exception:
+            # Just in case something weird happens (like non-string event)
+            print("[CONN-BUS] 🔊 EMIT (unlogged event)")
+
         for cb in listeners:
             try:
                 cb(*args, **kwargs)
             except Exception as e:
-                print(f"[CONN-BUS[{self.session_id[:8]}]] ⚠️ Handler error: {e}")
+                print(f"[CONN-BUS[{getattr(self, 'session_id', '????')[:8]}]] ⚠️ Handler error: {e}")
 
     @classmethod
     def get(cls, session_id):

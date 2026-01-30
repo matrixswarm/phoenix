@@ -50,6 +50,20 @@ class EmailSend(PhoenixPanelInterface):
             row3.addWidget(self.smtp_user)
             conn_layout.addLayout(row3)
 
+            # === To (Email) Row with Save/Delete ===
+            row4 = QHBoxLayout()
+            row4.addWidget(QLabel("To (email)"))
+
+            self.to_address = QLineEdit()
+            self.to_address.setSizePolicy(self.smtp_user.sizePolicy())
+            row4.addWidget(self.to_address, stretch=1)
+            conn_layout.addLayout(row4)
+
+            conn_box.setLayout(conn_layout)
+            layout.addWidget(conn_box)
+
+
+
             pw_row = QHBoxLayout()
             pw_row.addWidget(QLabel("Password"))
             self.smtp_pass = QLineEdit()
@@ -58,26 +72,18 @@ class EmailSend(PhoenixPanelInterface):
             self.view_pass_btn.setCheckable(True)
             self.view_pass_btn.setFixedWidth(70)
             self.view_pass_btn.toggled.connect(self._toggle_password_visibility)
+
             pw_row.addWidget(self.smtp_pass)
             pw_row.addWidget(self.view_pass_btn)
             conn_layout.addLayout(pw_row)
 
-            conn_box.setLayout(conn_layout)
-            layout.addWidget(conn_box)
+
 
             # === Message Section ===
             msg_box = QGroupBox("✉️ Message Details")
             msg_layout = QVBoxLayout()
 
-            # === To (Email) Row with Save/Delete ===
-            row4 = QHBoxLayout()
-            row4.addWidget(QLabel("To (email)"))
 
-            self.to_address = QComboBox()
-            self.to_address.setEditable(True)
-            self.to_address.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
-            self.to_address.setSizePolicy(self.smtp_user.sizePolicy())
-            row4.addWidget(self.to_address, stretch=1)
 
 
             # Save button
@@ -286,8 +292,9 @@ class EmailSend(PhoenixPanelInterface):
             self.smtp_pass.setText(str(cfg.get("smtp_password", "")))
 
             # optional pre-fill for convenience
-            if cfg.get("smtp_username"):
-                self.to_address.setText(cfg.get("smtp_username", ""))
+            if cfg.get("smtp_to"):
+                self.to_address.setText(cfg.get("smtp_to", ""))
+
             else:
                 self.to_address.clear()
 
@@ -313,7 +320,7 @@ class EmailSend(PhoenixPanelInterface):
                         "smtp_port": self.smtp_port.text().strip(),
                         "from": self.smtp_user.text().strip(),
                         "password": self.smtp_pass.text().strip(),
-                        "to": self.to_address.currentText().strip(),
+                        "to": self.to_address.text().strip(),
                         "subject": self.subject.text().strip(),
                         "body": self.body.toPlainText().strip(),
                     }

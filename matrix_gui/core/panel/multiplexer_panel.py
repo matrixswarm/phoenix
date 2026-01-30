@@ -100,10 +100,8 @@ class MultiplexerPanel(QDialog):
             outbound.preferred_channel = selected
 
             # Resolve the actual universal_id of the selected transport
-            uid = None
             for a in self.deployment.get("agents", []):
                 if a.get("name", "").lower() == selected.lower():
-                    uid = a.get("universal_id")
                     outbound.set_outbound_connector(a)
                     break
 
@@ -129,25 +127,20 @@ class MultiplexerPanel(QDialog):
                 print("[MULTIPLEXER] No outbound dispatcher found.")
                 return
 
-            info = outbound.get_outbound_connector()
-            if not info:
+            agent = outbound.get_outbound_connection()
+            if not agent or not isinstance(agent, dict):
+                print("[MULTIPLEXER] No active agent found.")
+                return
+
+            connection = agent.get("connection",{})
+            if not connection or not isinstance(connection, dict):
                 print("[MULTIPLEXER] No active outbound connector found.")
                 return
 
-            connector = info.get("connector")
-            current_proto = (info.get("proto") or "").lower()
-            if not connector:
-                return
+            current_proto = (connection.get("proto") or "").lower()
 
             # Try to extract the agent name (matrix_email, matrix_https, etc.)
-            agent_name = getattr(connector, "agent", None)
-            if isinstance(agent_name, dict):
-                agent_name = agent_name.get("name", "").lower()
-            elif hasattr(connector, "agent"):
-                try:
-                    agent_name = connector.agent.get("name", "").lower()
-                except Exception:
-                    agent_name = None
+            agent_name = agent.get("name", "").lower()
 
             print(f"[MULTIPLEXER][SYNC] active proto={current_proto}, agent={agent_name}")
 

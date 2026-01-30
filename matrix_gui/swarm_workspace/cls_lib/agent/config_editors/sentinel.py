@@ -109,6 +109,7 @@ class Sentinel(BaseEditor):
     # SAVE CONFIG CHANGES
     # ---------------------------------------------------------
     def _save(self):
+
         mode = self.mode.currentIndex()
 
         # Passive

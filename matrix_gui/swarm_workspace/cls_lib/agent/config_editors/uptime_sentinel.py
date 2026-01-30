@@ -33,6 +33,10 @@ class UptimeSentinel(BaseEditor, ListEditorMixin, ServiceRolesMixin):
         self.cooldown.setRange(0, 86400)
         self.cooldown.setValue(int(cfg.get("cooldown", 120)))
 
+        # alert enabled toggle
+        self.alert_enabled = QCheckBox("Enable alerts")
+        self.alert_enabled.setChecked(bool(cfg.get("alert_enabled", 0)))
+
         # --- Logging behaviour ---
         self.log_every = QSpinBox()
         self.log_every.setRange(30, 86400)
@@ -49,6 +53,7 @@ class UptimeSentinel(BaseEditor, ListEditorMixin, ServiceRolesMixin):
 
         gl.addRow("Interval (sec):", self.interval)
         gl.addRow("Cooldown (sec):", self.cooldown)
+        gl.addRow("Alerts Enabled:", self.alert_enabled)
         gl.addRow("Alert To Role:", self.alert_role)
 
         self.layout.addRow(QLabel("🟢 Uptime Sentinel Settings"))
@@ -112,6 +117,7 @@ class UptimeSentinel(BaseEditor, ListEditorMixin, ServiceRolesMixin):
             "cooldown": int(self.cooldown.value()),
             "alert_to_role": self.alert_role.text().strip(),
             "log_every": int(self.log_every.value()),
+            "alert_enabled": self.alert_enabled.isChecked(),
             "only_log_state_changes": self.only_log_state_changes.isChecked(),
             "targets": clean_targets,
             "service-manager": [{"role": roles}],
