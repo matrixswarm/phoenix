@@ -105,6 +105,8 @@ def _connect_single(deployment, session_id, dep_id):
                         f"[CONNECT][ERROR] Failed to launch {proto} connector for {agent.get('universal_id')}", e
                     )
 
+        #auto monitor threads that need to persist
+        connection_launcher.start_auto_monitor()
         return ctx
 
     except Exception as e:

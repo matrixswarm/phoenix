@@ -98,8 +98,7 @@ class VaultPasswordDialog(QDialog):
             try:
                 vault_data = load_vault_singlefile(password, self.vault_file_path)
             except Exception as e:
-                QMessageBox.critical(self, "Incorrect Password",
-                                     "The password you entered is not correct.\nPlease try again.")
+                QMessageBox.critical(self, "Incorrect Password","The password you entered is not correct.\nPlease try again.")
                 self.password_input.clear()
                 self.password_input.setFocus()
                 return

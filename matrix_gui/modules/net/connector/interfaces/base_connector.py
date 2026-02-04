@@ -102,6 +102,13 @@ class BaseConnector(ABC):
         if self._shared:
             self._shared["last_heartbeat"] = time.time()
 
+    def reboot_now(self):
+        """
+        Signals to connection_launcher's auto monitor to reboot the this thread now
+        """
+        if self._shared:
+            self._shared["reboot_now"] = True
+
     # ------------------------------------------------------------------
     # Unified run logic
     # ------------------------------------------------------------------
@@ -114,10 +121,10 @@ class BaseConnector(ABC):
         """
         try:
 
-            if not self.persistent:
-                self.run_once()
-            else:
+            if self.persistent:
                 self.run_loop()
+            else:
+                self.run_once()
 
         except Exception as e:
             emit_gui_exception_log(f"{self.__class__.__name__}.run()", e)
@@ -127,6 +134,8 @@ class BaseConnector(ABC):
                 self.close(self.session_id, self._channel_name)
             except Exception:
                 pass
+
+        print(f"{self.__class__.__name__}.run(): thread exiting cleanly.")
 
     # ------------------------------------------------------------------
     # Template methods for subclasses to override
@@ -145,10 +154,16 @@ class BaseConnector(ABC):
         Persistent socket or repeating task behavior. Override for WSS connectors.
         By default, loops calling loop_tick() until stopped.
         """
-        while not self.stopped():
+        continue_loop=True
+        while not self.stopped() and continue_loop:
             try:
-                self.loop_tick()
+                continue_loop=self.loop_tick()
+                if(continue_loop):
+                    self.heartbeat()
+                    time.sleep(1)
+
             except Exception as e:
+                continue_loop=False
                 emit_gui_exception_log(f"{self.__class__.__name__}.loop_tick()", e)
                 time.sleep(1)
 
@@ -209,10 +224,7 @@ class BaseConnector(ABC):
             host (str, optional): Hostname for context in the event.
             port (int, optional): Port number for context in the event.
         """
-        if self._closed:
-            return
 
-        self._closed = True
         ConnectorBus.get(self.session_id).emit(
             "channel.status",
             session_id=self.session_id,

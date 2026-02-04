@@ -23,7 +23,7 @@ class WorkspaceStore(VaultStore):
         )
 
     def validate_store(self):
-        data = self.root_vault.data.get(self.section_key, {})
+        data = self.root.data.setdefault(self.section_key, {})
         if not isinstance(data, dict):
             return False
 

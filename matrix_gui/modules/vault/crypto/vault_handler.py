@@ -1,6 +1,5 @@
 import os, json, base64, rsa, tempfile, shutil, glob
 from cryptography.fernet import Fernet
-from inotify.test_support import temp_path
 
 from matrix_gui.modules.vault.crypto.password_encryption import derive_key_from_password
 
@@ -92,9 +91,11 @@ def load_vault_singlefile(password: str, data_path: str) -> dict:
         # Decrypt vault
         fernet = Fernet(fernet_key)
         decrypted_data = fernet.decrypt(encrypted_vault)
-        return json.loads(decrypted_data)
+
+        return json.loads(decrypted_data.decode("utf-8"))
     except Exception as e:
         print(f"[VAULT_HANDLER_ERROR] Failed to load vault: {e}")
+        return False
 
 
 def retrieve_full_vault(password: str, data_path: str) -> dict:

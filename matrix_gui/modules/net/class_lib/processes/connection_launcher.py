@@ -30,7 +30,7 @@ class ConnectionLauncher:
         self._shared_state = {}   # thread_id -> shared dict
         self._lock = threading.Lock()
 
-        print("ThreadLauncher initialized")
+        print("ConnectionLauncher initialized")
 
     # --------------------------------------------------
     def load(self, universal_id, class_path, context=None, check_interval=30):
@@ -66,9 +66,10 @@ class ConnectionLauncher:
                 "started_at": None,
                 "last_heartbeat": None,
                 "stop": False,
+                "reboot_now": False #a way for the thread to signal to reboot itself
             }
 
-        #print(f"[ThreadLauncher][LOAD] Registered {class_path} as {universal_id}")
+        #print(f"[ConnectionLauncher][LOAD] Registered {class_path} as {universal_id}")
         return self
 
     def launch(self, universal_id, packet:dict=None, fire_catapult=False):
@@ -98,19 +99,26 @@ class ConnectionLauncher:
                 shared["thread_id"] = thread_id
                 shared["started_at"] = time.time()
                 shared["last_heartbeat"] = time.time()
+                shared["reboot_now"] = False
                 shared["stop"] = False
 
             cls = self._load_class(class_path)
             persist = getattr(cls, "persistent", False)
             run_on_launch = getattr(cls, "run_on_launch", False)
 
+            with self._lock:
+                self._registry[universal_id]["persist"] = persist
+
             t=None
             if fire_catapult or run_on_launch:
-                shared = {"session_id": context.get("session_id"),
-                          "agent": context.get("agent"),
-                          "deployment": context.get("deployment"),
-                          "context": context,
-                          "packet": packet}
+                # Update the shared dict (never replace it)
+                shared.update({
+                    "session_id": context.get("session_id"),
+                    "agent": context.get("agent"),
+                    "deployment": context.get("deployment"),
+                    "context": context,
+                    "packet": packet,
+                })
 
                 instance = cls(shared=shared)
 
@@ -126,33 +134,38 @@ class ConnectionLauncher:
 
                 t.start()
 
-                print(f"[ThreadLauncher][LAUNCH] Started {universal_id} as thread {thread_id}")
+                print(f"[ConnectionLauncher][LAUNCH] Started {universal_id} as thread {thread_id}")
 
             return t
 
         except Exception as e:
-            emit_gui_exception_log("ThreadLauncher.launch()", e)
+            emit_gui_exception_log("ConnectionLauncher.launch()", e)
 
     # --------------------------------------------------
-    def kill_thread(self, thread_id: str):
+    def kill_thread(self, universal_id: str):
         """
         Terminate and clean up a managed thread.
 
         Args:
-            thread_id (str): Identifier of the thread to kill.
+            universal_id (str): registry key to locate the thread to kill.
         """
         with self._lock:
-            t = self._threads.get(thread_id)
-            if not t:
+
+            thread_id = self._registry.get(universal_id,{}).get("thread_id", False)
+            if not thread_id:
+                print(f"[NUKER] No active thread_id to nuke using {universal_id}.")
+                return
+
+            t = self._threads.get(thread_id, False)
+            if not t or not isinstance(t, threading.Thread):
                 print(f"[NUKER] No active thread {thread_id} to nuke.")
                 return
+
             print(f"[NUKER] Nuking thread {thread_id}")
-            self._shared_state.pop(thread_id, None)
-            self._registry.pop(thread_id, None)
             try:
                 if t.is_alive():
                     # Try to stop gracefully if possible
-                    shared = self._shared_state.get(thread_id)
+                    shared = self._shared_state.get(universal_id)
                     if shared:
                         shared["stop"] = True
                     # force cleanup
@@ -173,7 +186,7 @@ class ConnectionLauncher:
             return  # already running
 
         def _monitor_loop():
-            print("[ThreadLauncher][MONITOR] Auto-monitor active.")
+            print("[ConnectionLauncher][MONITOR] Auto-monitor active.")
             while True:
                 try:
                     now = time.time()
@@ -187,76 +200,51 @@ class ConnectionLauncher:
                             alive = t.is_alive() if t else False
 
                             # restart conditions:
-                            if not alive:
+                            if not alive and bool(meta['persist']) and not bool(shared["stop"]):
                                 restarts.append(uid)
-                            else:
+                            elif bool(meta['persist']) and bool(shared["reboot_now"]): #thread wants to get rebooted if true
+                                restarts.append(uid)
+                            elif bool(meta['persist']) and not bool(shared["stop"]):
                                 hb = shared.get("last_heartbeat", 0)
                                 if now - hb > meta["check_interval"] * 2:
+                                    print("heatbeat failure")
                                     restarts.append(uid)
 
                     for uid in restarts:
                         print(f"[MONITOR] Restarting {uid}")
-                        old_tid = self._registry[uid]["thread_id"]
-                        self.kill_thread(old_tid)
+                        self.kill_thread(uid)
                         self.launch(uid)
 
                     time.sleep(10)
 
                 except Exception as e:
-                    emit_gui_exception_log("ThreadLauncher.auto_monitor()", e)
+                    emit_gui_exception_log("ConnectionLauncher.auto_monitor()", e)
                     time.sleep(check_interval)
 
         self._monitor_thread = threading.Thread(target=_monitor_loop, name="thread_launcher_monitor", daemon=True)
         self._monitor_thread.start()
 
     # --------------------------------------------------
-    def stop(self, thread_id: str):
-        """
-        Signal a running thread to stop gracefully.
+    def stop_uid(self, universal_id):
+        with self._lock:
+            meta = self._registry.get(universal_id)
+            if not meta:
+                print(f"[STOP] No such universal_id {universal_id}")
+                return False
 
-        Args:
-            thread_id (str): Identifier of the thread to signal.
-        """
-        try:
-            with self._lock:
-                shared = self._shared_state.get(thread_id)
-                if not shared:
-                    print(f"Stop requested for unknown thread {thread_id}")
-                    return
+            # retrieve the thread_id
+            tid = meta.get("thread_id")
+            if not tid:
+                print(f"[STOP] No thread for {universal_id}")
+                return False
 
+            # mark the shared stop flag
+            shared = self._shared_state.get(universal_id)
+            if shared:
                 shared["stop"] = True
-                print(f"Stop signal sent to thread {thread_id}")
 
-        except Exception as e:
-            emit_gui_exception_log("ThreadLauncher.stop()", e)
-
-    # --------------------------------------------------
-    def _cleanup(self, thread_id: str):
-        """
-        Internal cleanup hook after a thread exits to remove registry entries.
-
-        Args:
-            thread_id (str): Identifier of the thread that exited.
-        """
-        try:
-            meta={}
-            with self._lock:
-                uid = None
-                # find the uid that owns this thread_id
-                for k, v in self._registry.items():
-                    if v.get("thread_id") == thread_id:
-                        uid = k
-                        break
-                if uid:
-                    meta = self._registry.get(uid)
-
-            if meta:
-                print(f"Thread {thread_id} cleaned up ({meta.get('class_path')})")
-            else:
-                print(f"Thread {thread_id} cleanup with no registry entry")
-
-        except Exception as e:
-            emit_gui_exception_log("ThreadLauncher.cleanup()", e)
+            print(f"[STOP] Signal sent to {universal_id} → thread {tid}")
+            return True
 
     # --------------------------------------------------
     def _load_class(self, dotted_path: str):
@@ -281,30 +269,8 @@ class ConnectionLauncher:
             return cls
 
         except Exception as e:
-            emit_gui_exception_log("ThreadLauncher._load_class()", e)
+            emit_gui_exception_log("ConnectionLauncher._load_class()", e)
             raise
-
-    # --------------------------------------------------
-    def get_shared(self, thread_id: str):
-        """
-        Retrieve the shared context dict for a specific running thread.
-
-        Args:
-            thread_id (str): Identifier of the thread.
-
-        Returns:
-            dict | None: Shared context if found, else None.
-        """
-        try:
-            with self._lock:
-                shared = self._shared_state.get(thread_id)
-                if not shared:
-                    print(f"get_shared: unknown thread {thread_id}")
-                    return None
-                return shared
-        except Exception as e:
-            emit_gui_exception_log("ThreadLauncher.get_shared()", e)
-            return None
 
     # --------------------------------------------------
     def destroy_all(self, force=False):
@@ -322,7 +288,7 @@ class ConnectionLauncher:
             4. Stops the monitor loop if running.
         """
         try:
-            print("[ThreadLauncher][DESTROY] Commencing full shutdown sequence...")
+            print("[ConnectionLauncher][DESTROY] Commencing full shutdown sequence...")
             with self._lock:
                 # signal stop
                 for tid, shared in list(self._shared_state.items()):
@@ -348,16 +314,16 @@ class ConnectionLauncher:
                 print("[DESTROY] Stopping monitor thread...")
                 self._monitor_thread = None  # daemon thread will exit on its own
 
-            print("[ThreadLauncher][DESTROY] ✅ All connections destroyed.")
+            print("[ConnectionLauncher][DESTROY] ✅ All connections destroyed.")
         except Exception as e:
             if not force:
-                emit_gui_exception_log("ThreadLauncher.destroy_all()", e)
+                emit_gui_exception_log("ConnectionLauncher.destroy_all()", e)
             else:
                 # fallback: hard purge everything
                 self._threads.clear()
                 self._registry.clear()
                 self._shared_state.clear()
                 self._monitor_thread = None
-                print("[ThreadLauncher][DESTROY][FORCE] ⚠️ Forced purge completed.")
+                print("[ConnectionLauncher][DESTROY][FORCE] ⚠️ Forced purge completed.")
 
 

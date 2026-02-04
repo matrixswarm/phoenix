@@ -27,7 +27,7 @@ try:
     print("PyQt version:", PYQT_VERSION_STR)
 except Exception as e:
     print("PyQt import error:", e)
-import os, sys, multiprocessing
+import sys, multiprocessing
 from PyQt6.QtGui import QWindow
 from PyQt6.QtWidgets import QVBoxLayout, QMainWindow,  QWidget, QHBoxLayout, QPushButton, QApplication,QGraphicsDropShadowEffect, QMessageBox, QStackedWidget, QTabBar, QStatusBar, QLabel, QDialog, QTabWidget
 from PyQt6.QtCore import QTimer, Qt, QPropertyAnimation, QEasingCurve
@@ -39,6 +39,13 @@ from matrix_gui.core.emit_gui_exception_log import emit_gui_exception_log
 from matrix_gui.core.event_bus import SessionRegistry
 from matrix_gui.core.splash import PhoenixSplash
 from matrix_gui.modules.vault.ui.vault_popup import VaultPasswordDialog
+
+#vault dialog
+from matrix_gui.modules.vault.vault_selector_dialog import VaultSelectorDialog
+from matrix_gui.modules.vault.vault_create_dialog import VaultCreateDialog
+from matrix_gui.modules.vault.vault_unlock_dialog import VaultUnlockDialog
+from matrix_gui.modules.vault.vault_change_password_dialog import VaultChangePasswordDialog
+from matrix_gui.modules.vault.vault_service import VaultService
 
 from matrix_gui.core.event_bus import EventBus
 from matrix_gui.core.phoenix_control_panel import PhoenixControlPanel
@@ -155,12 +162,10 @@ class PhoenixCockpit(QMainWindow):
 
         self.tab_stack.tabBar().setTabButton(0, QTabBar.ButtonPosition.RightSide, None)
 
-        # Optional: decorate with glow
         shadow = QGraphicsDropShadowEffect(self.unlock_button)
         shadow.setColor(QColor( 0, 0, 255))
         shadow.setBlurRadius(30)
         shadow.setOffset(0, 0)
-        self.unlock_button.setGraphicsEffect(shadow)
 
         # --- Locked screen ---
         self.stack = QStackedWidget()
@@ -573,8 +578,19 @@ class PhoenixCockpit(QMainWindow):
 
         try:
 
-            if not kwargs.get("vault_data") or not kwargs["vault_data"].get("deployments"):
-                QMessageBox.warning(self, "Select a Vault", "You must select or create a vault before continuing.")
+            vault_data = kwargs.get("vault_data")
+
+            # Defensive normalize
+            if isinstance(vault_data, bytes):
+                try:
+                    import json
+                    vault_data = json.loads(vault_data.decode("utf-8"))
+                except Exception:
+                    vault_data = {}
+
+            # If another emitter fired empty kwargs, just ignore it
+            if not isinstance(vault_data, dict) or "deployments" not in vault_data:
+                print("[VAULT][WARN] Ignoring vault.unlocked with invalid or empty vault_data payload.")
                 return
 
             try:
@@ -722,20 +738,71 @@ class PhoenixCockpit(QMainWindow):
 
     def unlock_vault(self):
         """
-        Lean vault open/create coordinator.
-        - If no vaults exist: run create dialog, then initialize and emit 'vault.unlocked'.
-        - Else: run VaultPasswordDialog; it should decrypt, set the singleton, and emit 'vault.unlocked'.
-        Cockpit does not re-load or re-emit; it just coordinates UI.
+        Unified vault flow:
+            1. Ask user: Unlock / Create / Change Pass
+            2. Route to the correct dialog
+            3. Initialize the vault runtime cleanly via VaultService
+            4. UI flip triggered by vault.unlocked event
         """
-        # First-run: no vault directory contents → create one
         try:
+            while True:
+                selector = VaultSelectorDialog(self)
+                if selector.exec() != QDialog.DialogCode.Accepted:
+                    return  # user canceled entire flow
 
-            # Normal path: unlock dialog handles decrypt + singleton + event
-            dialog = VaultPasswordDialog(self)
-            if dialog.exec() != QDialog.DialogCode.Accepted:
-                return
-            # Do NOT reload or re-emit here; the dialog already emitted 'vault.unlocked'.
-            return
+                choice = selector.selection
+
+                # ---- CREATE NEW VAULT ----
+                if choice == "create":
+                    create_dlg = VaultCreateDialog(self)
+                    if create_dlg.exec() != QDialog.DialogCode.Accepted:
+                        continue  # return to selector
+
+                    new_path = create_dlg.vault_path
+                    new_pw = create_dlg.vault_password
+
+                    # Now force user to unlock it immediately
+                    unlock_dlg = VaultUnlockDialog(self)
+                    unlock_dlg.vault_path = new_path
+                    if unlock_dlg.exec() != QDialog.DialogCode.Accepted:
+                        continue  # return to selector
+
+                    VaultService.initialize_runtime(
+                        vault_data=unlock_dlg.vault_data,
+                        password=new_pw,
+                        path=new_path
+                    )
+                    return
+
+                # ---- UNLOCK EXISTING VAULT ----
+                elif choice == "unlock":
+                    unlock_dlg = VaultUnlockDialog(self)
+                    if unlock_dlg.exec() != QDialog.DialogCode.Accepted:
+                        continue  # return to selector
+
+                    VaultService.initialize_runtime(
+                        vault_data=unlock_dlg.vault_data,
+                        password=unlock_dlg.vault_password,
+                        path=unlock_dlg.vault_path
+                    )
+                    return
+
+                # ---- CHANGE VAULT PASSWORD ----
+                elif choice == "change":
+                    change_dlg = VaultChangePasswordDialog(self)
+                    if change_dlg.exec() != QDialog.DialogCode.Accepted:
+                        continue  # return to selector
+
+                    QMessageBox.information(
+                        self,
+                        "Password Updated",
+                        "Vault password has been successfully updated.\n"
+                        "Please unlock the vault again."
+                    )
+                    continue  # After password change, return to selector
+
+                else:
+                    return
 
         except Exception as e:
             emit_gui_exception_log("PhoenixCockpit.unlock_vault", e)

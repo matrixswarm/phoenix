@@ -3,7 +3,9 @@ import os, ssl, json, time, socket, tempfile
 from websocket import create_connection
 from Crypto.PublicKey import RSA
 
+from websocket._exceptions import WebSocketTimeoutException
 from matrix_gui.config.boot.globals import get_sessions
+from matrix_gui.core.emit_gui_exception_log import emit_gui_exception_log
 from matrix_gui.modules.net.entity.adapter.agent_cert_wrapper import AgentCertWrapper
 from matrix_gui.core.utils.spki_utils import verify_spki_pin
 from matrix_gui.core.utils import crypto_utils
@@ -85,11 +87,11 @@ def _establish_connection(host, port, agent, deployment, session_id, timeout=5):
         priv_key = RSA.import_key(priv_pem.encode())
         hello["sig"] = crypto_utils.sign_data(hello, priv_key)
         ws.send(json.dumps(hello))
-        ws.settimeout(None)
+        ws.settimeout(60)
         return ws
 
     except Exception as e:
-        print(f"[WSSConnector][{agent.get('universal_id')}] connect error: {e}")
+        emit_gui_exception_log(f"[wss._establish_connection][{agent.get('universal_id')}] connect error", e)
         return None
     finally:
         for p in (cert_path, key_path):
@@ -125,6 +127,7 @@ class WSSConnector(BaseConnector):
         self._websocket = None
         self._last_pong = 0
 
+
     # ----------------------------- main loop ---------------------------
     def loop_tick(self):
         """
@@ -135,44 +138,43 @@ class WSSConnector(BaseConnector):
         - Handle socket errors, timeouts, and ghost sockets.
         - Sleep briefly to pace the loop.
         """
-        if not self._websocket or not self._ping_check():
-            self._connect_socket()
-            return
-
+        continue_loop = False
         try:
-            msg = self._websocket.recv()
 
-            # Handle Windows ghost sockets (recv() returns None or empty)
-            if not msg:
-                print("[WSSConnector] ⚠️ Empty recv() — treating as dead socket.")
-                raise ConnectionError("socket silent/dead")
+            if not self._websocket:
+                self._connect_socket()
+                print(f"Establishing websocket connection...")
+                if self._websocket:
+                    continue_loop=True
 
-            self._last_pong = time.time()
+            else:
 
-            self.heartbeat()
-            ConnectorBus.get(self.session_id).emit(
-                "inbound.raw",
-                session_id=self.session_id,
-                channel=self.agent.get("universal_id"),
-                source=self.agent.get("universal_id"),
-                payload=json.loads(msg),
-                ts=time.time(),
-            )
+                self._emit_status("connected")
+                msg = self._websocket.recv()
 
-        except (AttributeError, TypeError):
-            print("[WSSConnector] Socket vanished mid-tick.")
-            self._close_socket()
+                # Handle Windows ghost sockets (recv() returns None or empty)
+                if not msg:
+                    print("[WSSConnector] ⚠️ Empty recv() — treating as dead socket.")
+                    raise ConnectionError("socket silent/dead")
 
-        except (ConnectionResetError, ConnectionAbortedError,
-                ConnectionError, OSError) as e:
-            print(f"[WSSConnector] 💀 Socket failure detected ({type(e).__name__}): {e}")
-            self._emit_status("disconnected")
-            self._close_socket()
+                ConnectorBus.get(self.session_id).emit(
+                    "inbound.raw",
+                    session_id=self.session_id,
+                    channel=self.agent.get("universal_id"),
+                    source=self.agent.get("universal_id"),
+                    payload=json.loads(msg),
+                    ts=time.time(),
+                )
 
-        except socket.timeout:
-            self._handle_timeout()
+                self._keep_alive()
+                continue_loop=True
 
-        time.sleep(0.5)
+        except (socket.timeout, TimeoutError, WebSocketTimeoutException) as e:
+            emit_gui_exception_log(f"[WSSConnector] 💀 Socket timeout ({type(e).__name__})", e)
+        except (ConnectionResetError, ConnectionAbortedError, ConnectionError, OSError) as e:
+            emit_gui_exception_log(f"[WSSConnector] 💀 Socket failure detected ({type(e).__name__})", e)
+
+        return continue_loop
 
     # ----------------------------- helpers -----------------------------
     def _connect_socket(self):
@@ -196,48 +198,22 @@ class WSSConnector(BaseConnector):
         ws = _establish_connection(host, port, agent, dep, sid)
         if ws:
             self._websocket = ws
-            self._last_pong = time.time()
             self._emit_status("connected", host, port)
             print(f"[WSSConnector] Connected to {host}:{port}")
         else:
             self._emit_status("disconnected")
             time.sleep(5)
 
-    def _handle_timeout(self):
-        """
-        Perform a ping to keep the WebSocket alive on timeout.
-
-        Sends a WebSocket ping, updates heartbeat, or disconnects on failure.
-        """
+    def _keep_alive(self):
         try:
-            self._websocket.ping()
-            self.heartbeat()
+            if self._last_pong:
+                lp = time.time() -self._last_pong
+                print(f"last ping {lp} seconds ago")
             self._last_pong = time.time()
-        except Exception:
-            self._emit_status("disconnected")
-            self._close_socket()
 
-    def _ping_check(self):
-        """
-        Check if the WebSocket is still alive based on last pong timestamp.
-
-        Returns:
-            bool: True if the socket exists and has recent activity.
-        """
-        if not self._websocket:
-            return False
-        try:
-            # On Windows, .ping() may not raise, so verify socket object
-            if not getattr(self._websocket, "sock", None):
-                return False
-            if time.time() - self._last_pong > 30:
-                print("[WSSConnector] Ping timeout – socket likely dead.")
-                return False
-            return True
-        except Exception:
-            return False
-
-
+        except Exception as e:
+            print(f"[WSSConnector] 💀 keep-alive failed: {e}")
+            raise ConnectionError("no pong")
 
     def _close_socket(self):
         """
