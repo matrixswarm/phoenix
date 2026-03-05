@@ -10,7 +10,7 @@ from PyQt6.QtGui import QColor
 
 from matrix_gui.modules.vault.services.vault_core_singleton import VaultCoreSingleton
 from matrix_gui.registry.object_classes import EDITOR_REGISTRY, PROVIDER_REGISTRY
-
+from matrix_gui.core.emit_gui_exception_log import emit_gui_exception_log
 
 class RegistryManagerDialog(QDialog):
     """
@@ -176,39 +176,45 @@ class RegistryManagerDialog(QDialog):
 
     # ---------------------------------------------------------
     def _add(self):
-        cls = self.class_lock or (
-            self.class_combo.currentText() if self.class_combo else None
-        )
-        editor_cls = EDITOR_REGISTRY.get(cls)
-        if not editor_cls:
-            QMessageBox.warning(self, "Missing Editor", f"No editor for {cls}")
-            return
 
-        editor = editor_cls(new_conn=True)
+        try:
+            cls = self.class_lock or (
+                self.class_combo.currentText() if self.class_combo else None
+            )
+            editor_cls = EDITOR_REGISTRY.get(cls)
+            if not editor_cls:
+                QMessageBox.warning(self, "Missing Editor", f"No editor for {cls}")
+                return
 
-        if editor.exec():
-            serial = editor.get_serial()
-            data = editor.serialize()
-            data["class"] = cls
-            data["path"] = editor.get_directory_path()
+            editor = editor_cls(new_conn=True)
 
-            # Add metadata
-            from datetime import datetime
-            data.setdefault("meta", {
-                "created": datetime.utcnow().isoformat() + "Z",
-                "modified": datetime.utcnow().isoformat() + "Z",
-                "version": 1
-            })
+            if editor.exec():
+                serial = editor.get_serial()
+                data = editor.serialize()
+                data["class"] = cls
+                data["path"] = editor.get_directory_path()
+
+                # Add metadata
+                from datetime import datetime
+                data.setdefault("meta", {
+                    "created": datetime.utcnow().isoformat() + "Z",
+                    "modified": datetime.utcnow().isoformat() + "Z",
+                    "version": 1
+                })
 
 
 
-            ns = self.registry_store.get_namespace(cls)
-            ns[serial] = data
+                ns = self.registry_store.get_namespace(cls)
+                ns[serial] = data
 
-            print("Namespace object id:", id(ns))
-            print("Store registry obj id:", id(self.registry_store.get_data()["discord"]))
-            self.registry_store.commit()
-            self._populate_tabs()
+                print("Namespace object id:", id(ns))
+                #print("Store registry obj id:", id(self.registry_store.get_data()["discord"]))
+                self.registry_store.commit()
+                self._populate_tabs()
+
+        except Exception as e:
+            emit_gui_exception_log("[RegistryManagerDialog][_add]:", e)
+
 
     def _edit(self):
         cls, serial = self._current_selection()

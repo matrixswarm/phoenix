@@ -118,7 +118,13 @@ class DeployDialog(QtWidgets.QDialog):
         host = ssh_cfg["host"]
         user = ssh_cfg["username"]
         port = int(ssh_cfg.get("port", 22))
-        privkey_pem = ssh_cfg["private_key"]
+        auth_type = ssh_cfg.get("auth_type", "private_key")
+        password = ssh_cfg.get("password")
+        privkey_pem = ssh_cfg.get("private_key")
+
+        if auth_type == "private_key" and not privkey_pem:
+            self.output.append("[ERROR] No private key provided.\n")
+            return
 
         # Deployment data (runtime)
         swarm_key = self.deployment["swarm_key"]
@@ -136,19 +142,9 @@ class DeployDialog(QtWidgets.QDialog):
         if self.flag_reboot_new.isChecked(): flags.append("--reboot-new")
         flag_str = " ".join(flags)
 
-
-        self.output.append(f"[CMD] sudo systemctl {action} matrixd.service\n")
+        self.output.append(f"[SSH] Connecting to {host} as {user} via {auth_type}\n")
 
         try:
-            key = paramiko.RSAKey.from_private_key(io.StringIO(privkey_pem))
-            client = paramiko.SSHClient()
-            client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-            client.connect(host, port=port, username=user, pkey=key)
-
-            transport = client.get_transport()
-            chan = transport.open_session()
-            chan.get_pty()
-
 
             if directive_name:
                 directive_remote = f"/matrix/boot_directives/{directive_name.split('boot_directives')[-1].replace('\\\\', '/').split('/')[-1]}"
@@ -190,15 +186,41 @@ class DeployDialog(QtWidgets.QDialog):
             self.output.append(f"[CMD] {cmd}\n")
 
             try:
-                key = paramiko.RSAKey.from_private_key(io.StringIO(privkey_pem))
                 client = paramiko.SSHClient()
                 client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-                client.connect(host, port=port, username=user, pkey=key)
+
+                if auth_type == "password":
+                    client.connect(
+                        host,
+                        port=port,
+                        username=user,
+                        password=password,
+                        look_for_keys=False,
+                        allow_agent=False
+                    )
+
+                elif auth_type == "private_key":
+                    key = paramiko.RSAKey.from_private_key(io.StringIO(privkey_pem))
+                    client.connect(
+                        host,
+                        port=port,
+                        username=user,
+                        pkey=key,
+                        look_for_keys=False,
+                        allow_agent=False
+                    )
+
+                elif auth_type == "agent":
+                    client.connect(
+                        host,
+                        port=port,
+                        username=user,
+                        allow_agent=True
+                    )
 
                 transport = client.get_transport()
                 chan = transport.open_session()
                 chan.get_pty()
-
                 chan.exec_command(cmd)
 
                 # store references so poller can read them

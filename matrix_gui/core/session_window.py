@@ -763,47 +763,6 @@ class SessionWindow(QMainWindow):
         except Exception as e:
             print(f"[CONTROL][ERROR] {e}")
 
-    #this is going to be converted to swarm only control
-    def _launch_matrix_rebooted(self):
-        try:
-            # === SAFETY PROMPT ===
-            confirm = QMessageBox.question(
-                self,
-                "⚠️ Reload Matrix Universe?",
-                (
-                    "This will *immediately* restart the entire Matrix universe.\n\n"
-                    "All agents will be terminated and relaunched.\n"
-                    "All active operations will be interrupted.\n\n"
-                    "⚡ This is **not** a soft reload.\n"
-                    "⚡ This is a full universe reboot.\n\n"
-                    "Are you absolutely sure you want to proceed?"
-                ),
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-                QMessageBox.StandardButton.No
-            )
-
-            if confirm != QMessageBox.StandardButton.Yes:
-                print("[COCKPIT] Matrix Reload cancelled by user.")
-                return
-
-            # === PROCEED WITH REBOOT ===
-            pk = Packet()
-            pk.set_data({
-                "handler": "cmd_matrix_reloaded"
-            })
-
-            self.bus.emit(
-                "outbound.message",
-                session_id=self.session_id,
-                channel="outgoing.command",
-                packet=pk
-            )
-
-            print("[COCKPIT] 🔁 Matrix Reload request sent.")
-
-        except Exception as e:
-            print(f"[COCKPIT][ERROR] Failed to launch Matrix reboot: {e}")
-
     def show_crypto_alert_panel(self):
         if "crypto_alert_panel" not in self._panel_cache:
             panel = CryptoAlertPanel(

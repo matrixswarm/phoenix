@@ -37,12 +37,43 @@ class RailgunWorker(QThread):
             host = self.ssh_meta["host"]
             user = self.ssh_meta["username"]
             port = int(self.ssh_meta.get("port", 22))
-            privkey = paramiko.RSAKey.from_private_key(io.StringIO(self.ssh_meta["private_key"]))
 
             # 1. SSH Connect
             client = paramiko.SSHClient()
             client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-            client.connect(host, port=port, username=user, pkey=privkey)
+
+            auth_type = self.ssh_meta.get("auth_type", "private_key")
+
+            if auth_type == "password":
+                client.connect(
+                    host,
+                    port=port,
+                    username=user,
+                    password=self.ssh_meta.get("password"),
+                    look_for_keys=False,
+                    allow_agent=False
+                )
+
+            elif auth_type == "private_key":
+                key_text = self.ssh_meta.get("private_key")
+                privkey = paramiko.RSAKey.from_private_key(io.StringIO(key_text))
+
+                client.connect(
+                    host,
+                    port=port,
+                    username=user,
+                    pkey=privkey,
+                    look_for_keys=False,
+                    allow_agent=False
+                )
+
+            elif auth_type == "agent":
+                client.connect(
+                    host,
+                    port=port,
+                    username=user,
+                    allow_agent=True
+                )
 
             # 2. Upload directive
             sftp = client.open_sftp()
